@@ -17,10 +17,22 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 
+/* From standard C++ library */
 #include <vector>
 #include <iostream>
 #include <list>
 #include <set>
+#include <queue>
+
+/* cv color*/
+#define YELLOW Scalar(0,255,255)
+#define BLACK Scalar(0,0,0)
+#define BLUE Scalar(255,0,0)
+#define GREEN Scalar(0,255,0)
+#define RED Scalar(0,0,255)
+#define PURPLE Scalar(240,32,160)
+#define ORANGE Scalar(0,97,255)
+#define BROWN  Scalar(42,42,128)
 
 
 #ifndef TRUE
@@ -57,5 +69,17 @@ void ShowMatchResult(Mat &img1,
 					 const std::vector<cv::KeyPoint>& imgpts1,
 					 const std::vector<cv::KeyPoint>& imgpts2,
 					 const std::vector<cv::DMatch>& matches);
+
+void addOne(string &str);
+
+struct CloudPoint 
+{
+	cv::Point3d pt;
+	std::vector<int> imgpt_for_img;
+	double reprojection_error;
+};
+
+
+std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts);
 
 #endif

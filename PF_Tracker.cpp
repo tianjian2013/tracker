@@ -1,5 +1,10 @@
 #include "PF_Tracker.h"
 #include "select.h"
+#include "OFFeatureMatcher.h"
+#include "FindCameraMatrix.h"
+#include "Triangulation.h"
+#include "RichFeatureMatcher.h"
+
 //---gsl的库文件-----------
 #pragma comment (lib, "libgsl.a")
 
@@ -26,6 +31,9 @@ int particle_cmp( const void* p1,const  void* p2 )
   return 0;
 }
 
+
+//static const double distcoeff[]={0.03489 ,  -0.25811,   -0.00048,   0.00330,  0.00000};
+
 PF_Tracker::PF_Tracker():frameNum(0)
 	                    ,frameheight(0)
 						,framewidth(0)
@@ -35,17 +43,34 @@ PF_Tracker::PF_Tracker():frameNum(0)
    gsl_rng_env_setup();
    rng = gsl_rng_alloc( gsl_rng_mt19937 );
    gsl_rng_set( rng, time(NULL) );
+
+   /*K = (Mat_ <double>(3, 3) << 1105.2, 0, 652.5, 
+                              0, 1106.5, 373.6,
+							  0, 0, 1);*/
+
+  /* K = (Mat_ <double>(3, 3) << 500.80696, 0, 307.20573, 
+							   0,  500.39406, 233.52064,
+                               0, 0, 1);*/
+							   
+   K = (Mat_ <double>(3, 3) <<7176.13570  ,0,662.33685,0, 7173.11117,681.71742 ,0,0,1);
+
+
 }
 
 void PF_Tracker::process(Mat & input,Mat & output)
 {
 	frame=input.clone();
+	output=input.clone(); 
+
 	cvtColor(frame,hsv_frame,CV_BGR2HSV );
 
 	/* allow user to select object to be tracked in the first frame */
 	frameNum++;
+	//previousImgs.push_back(frame);
+
 	if(frameNum==1)     //手动选择跟踪目标，在初始帧
 	{
+
 		framewidth=frame.cols;
 		frameheight=frame.rows;
 		boundary=Rect(0,0,framewidth-1,frameheight-1);
@@ -59,6 +84,9 @@ void PF_Tracker::process(Mat & input,Mat & output)
 			    break;
 		}
 		region=box;
+		previousRegions.push_back(region);
+		previousImgs.push_back(input);
+
 		ref_histo = compute_ref_histos( hsv_frame, region );
 		particles = init_distribution( region, ref_histo, num_particles );
 		output=frame.clone();
@@ -90,13 +118,14 @@ void PF_Tracker::process(Mat & input,Mat & output)
 	  {
 	    color = CV_RGB(255,255,0);
 	    //display_particle( frames[i], particles[j], color );
-	  }
-      
-      /* display most likely particle */
-      color = CV_RGB(0,255,255);
-      display_particle( frame, particles[0], color );
-	  output=frame.clone();
-     
+	  }  
+	sfm();
+	region.x = particles[0].x - particles[0].width * particles[0].s / 2;
+    region.y = particles[0].y - particles[0].height * particles[0].s / 2;
+	region.height = particles[0].height * particles[0].s;
+	region.width = particles[0].width * particles[0].s;
+	region&=boundary;
+	rectangle(output, region, RED, 2);
 }
 
 /*
@@ -409,14 +438,125 @@ particle* PF_Tracker::resample( particle* particles, int n )
   return new_particles;
 }
 
-void PF_Tracker::display_particle( Mat img, particle p, CvScalar color )
+void PF_Tracker::sfm()
 {
-  int x0, y0, x1, y1;
+	Mat prev = previousImgs.back();
+	Rect prevRegion = previousRegions.back();
+	Mat src1 = prev;//(prevRegion);
 
-  x0 = cvRound( p.x - 0.5 * p.s * p.width );
-  y0 = cvRound( p.y - 0.5 * p.s * p.height );
-  x1 = x0 + cvRound( p.s * p.width );
-  y1 = y0 + cvRound( p.s * p.height );
-  
- rectangle( img, cvPoint( x0, y0 ), cvPoint( x1, y1 ), color, 2, 8, 0 );
+	Rect regionNew = region;
+	regionNew.height = prevRegion.height;
+	regionNew.width = prevRegion.width;
+	Mat src2 = frame;//(regionNew);
+
+	//imshow("src1", src1);
+	//imshow("src2", src2);
+	//waitKey();
+
+	vector<cv::Mat> imgs; 
+	vector<vector<cv::KeyPoint> > imgpts;
+	vector<DMatch> matches;
+
+	imgs.push_back(src1);
+	imgs.push_back(src2);
+
+	RichFeatureMatcher richMatcher(imgs, imgpts);
+	richMatcher.MatchFeatures(0, 1, &matches);
+
+	//OFFeatureMatcher offMatcher(imgs, imgpts);
+	//offMatcher.MatchFeatures(0, 1, &matches);
+	/*for(int i=0;i< imgpts[0].size();i++)
+	{
+		imgpts[0][i].pt.x+=prevRegion.x;
+		imgpts[0][i].pt.y+=prevRegion.y;
+	}
+	for(int i=0;i< imgpts[1].size();i++)
+	{
+		imgpts[1][i].pt.x+=regionNew.x;
+		imgpts[1][i].pt.y+=regionNew.y;
+	}*/
+
+	//ShowMatchResult(src1, src2, imgpts[0], imgpts[1], matches);
+
+	if (matches.size() < 10)
+	{
+		cout << "not enough matches " << "\n";
+		return;
+	}
+
+	vector<KeyPoint> imgpts1_good, imgpts2_good;
+	Mat F = GetFundamentalMat(imgpts[0], imgpts[1], imgpts1_good, imgpts2_good, matches);
+	Mat_<double> E = K.t() * F * K; //according to HZ (9.12)
+    //according to http://en.wikipedia.org/wiki/Essential_matrix#Properties_of_the_essential_matrix
+    if(fabsf(determinant(E)) > 1e-07) 
+	{
+		cout << "det(E) != 0 : " << determinant(E) << "\n";
+	}
+	//else
+	{
+		Mat_<double> R1(3,3);
+		Mat_<double> R2(3,3);
+		Mat_<double> t1(1,3);
+		Mat_<double> t2(1,3);	
+		DecomposeEtoRandT(E,R1,R2,t1,t2);
+		if(determinant(R1)+1.0 < 1e-09) 
+		{
+			//according to http://en.wikipedia.org/wiki/Essential_matrix#Showing_that_it_is_valid
+			cout << "det(R) == -1 ["<<determinant(R1)<<"]: flip E's sign" << endl;
+			E = -E;
+			DecomposeEtoRandT(E,R1,R2,t1,t2);
+	    }
+	    Matx34d P=(1,0,0,0,  //	R1(0,1),	R1(0,2),	t1(0),
+				   0,1,0,0,//		 R1(1,0),	R1(1,1),	R1(1,2),	t1(1),
+				   0,0,1,0);		 //R1(2,0),	R1(2,1),	R1(2,2),	t1(2));;
+	    Matx34d P1 = Matx34d(R1(0,0),	R1(0,1),	R1(0,2),	t1(0),
+							 R1(1,0),	R1(1,1),	R1(1,2),	t1(1),
+						     R1(2,0),	R1(2,1),	R1(2,2),	t1(2));
+	    //cout << "Testing P1 " << endl << Mat(P1) << endl;
+
+	    vector<CloudPoint> pcloud,pcloud1; 
+	    vector<KeyPoint> corresp;
+	    Mat distcoeff;
+	    double reproj_error1 = TriangulatePoints(imgpts1_good, imgpts2_good, K, K.inv(), distcoeff, P, P1, pcloud, corresp);
+	    double reproj_error2 = TriangulatePoints(imgpts2_good, imgpts1_good, K, K.inv(), distcoeff, P1, P, pcloud1, corresp);
+	    vector<uchar> tmp_status;
+	    if (!TestTriangulation(pcloud,P1,tmp_status) || !TestTriangulation(pcloud1,P,tmp_status) || reproj_error1 > 100.0 || reproj_error2 > 100.0) 
+	    {
+		   P1 = Matx34d(R1(0,0),	R1(0,1),	R1(0,2),	t2(0),
+							 R1(1,0),	R1(1,1),	R1(1,2),	t2(1),
+							 R1(2,0),	R1(2,1),	R1(2,2),	t2(2));
+		   //cout << "Testing P1 "<< endl << Mat(P1) << endl;
+		   pcloud.clear(); pcloud1.clear(); corresp.clear();
+		   reproj_error1 = TriangulatePoints(imgpts1_good, imgpts2_good, K, K.inv(), distcoeff, P, P1, pcloud, corresp);
+		   reproj_error2 = TriangulatePoints(imgpts2_good, imgpts1_good, K, K.inv(), distcoeff, P1, P, pcloud1, corresp);
+		   if (!TestTriangulation(pcloud,P1,tmp_status) || !TestTriangulation(pcloud1,P,tmp_status) || reproj_error1 > 100.0 || reproj_error2 > 100.0) 
+	       {
+			   P1 = Matx34d(R2(0,0),	R2(0,1),	R2(0,2),	t1(0),
+								 R2(1,0),	R2(1,1),	R2(1,2),	t1(1),
+								 R2(2,0),	R2(2,1),	R2(2,2),	t1(2));
+			   //cout << "Testing P1 "<< endl << Mat(P1) << endl;
+			   pcloud.clear(); pcloud1.clear(); corresp.clear();
+			   reproj_error1 = TriangulatePoints(imgpts1_good, imgpts2_good, K, K.inv(), distcoeff, P, P1, pcloud, corresp);
+			   reproj_error2 = TriangulatePoints(imgpts2_good, imgpts1_good, K, K.inv(), distcoeff, P1, P, pcloud1, corresp);
+			   if (!TestTriangulation(pcloud,P1,tmp_status) || !TestTriangulation(pcloud1,P,tmp_status) || reproj_error1 > 100.0 || reproj_error2 > 100.0) 
+			   {
+						P1 = Matx34d(R2(0,0),	R2(0,1),	R2(0,2),	t2(0),
+									 R2(1,0),	R2(1,1),	R2(1,2),	t2(1),
+									 R2(2,0),	R2(2,1),	R2(2,2),	t2(2));
+						//cout << "Testing P1 "<< endl << Mat(P1) << endl;
+
+						pcloud.clear(); pcloud1.clear(); corresp.clear();
+						reproj_error1 = TriangulatePoints(imgpts1_good, imgpts2_good, K, K.inv(), distcoeff, P, P1, pcloud, corresp);
+						reproj_error2 = TriangulatePoints(imgpts2_good, imgpts1_good, K, K.inv(), distcoeff, P1, P, pcloud1, corresp);
+						
+						if (!TestTriangulation(pcloud,P1,tmp_status) || !TestTriangulation(pcloud1,P,tmp_status) || reproj_error1 > 100.0 || reproj_error2 > 100.0) 
+						{
+							cout << "Shit." << endl; 
+							
+				        }
+			   }			
+		   }
+	   }
+	   //cout<<t1<<endl;
+  	}
 }

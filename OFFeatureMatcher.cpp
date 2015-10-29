@@ -46,7 +46,7 @@ void OFFeatureMatcher::MatchFeatures(int idx_i, int idx_j, vector<DMatch>* match
 	vector<int> to_find_back_idx;
 	for (unsigned int i = 0; i < vstatus.size(); i++)
 	{
-		if (vstatus[i] && verror[i] < 1.0)
+		if (vstatus[i] && verror[i] < 6.0)
 		{
 			to_find_back_idx.push_back(i);
 			to_find.push_back(j_pts[i]);

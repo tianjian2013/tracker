@@ -35,3 +35,30 @@ void ShowMatchResult(Mat &img1,
 		waitKey(0);
 	}
 }
+
+void addOne(string &str)
+{
+	int n = str.size() - 1;
+	while (n >= 0)
+	{
+		if (str[n] == '9')
+		{
+			str[n] = '0';
+			n--;
+		}
+		else
+		{
+			str[n] = str[n] + 1;
+			break;
+		}
+	}
+}
+
+std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts) 
+{
+	std::vector<cv::Point3d> out;
+	for (unsigned int i=0; i<cpts.size(); i++) {
+		out.push_back(cpts[i].pt);
+	}
+	return out;
+}

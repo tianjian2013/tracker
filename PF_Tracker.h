@@ -100,5 +100,11 @@ private:
 	float histo_dist_sq( histogram* h1, histogram* h2 );
 	particle* resample( particle* particles, int n );
 	//int particle_cmp( void* p1, void* p2 );
-	void display_particle( Mat img, particle p, CvScalar color );
+
+//sfm 
+private:
+	Mat K;
+	deque <Mat> previousImgs;
+	deque <Rect> previousRegions;
+	void sfm();
 };

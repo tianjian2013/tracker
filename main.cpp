@@ -1,35 +1,37 @@
+#include <string>
+#include <iostream>
+
+using namespace std;
+
 #include "common.h"
-//#include "OFFeatureMatcher.h"
 #include "PF_Tracker.h"
+
+
 
 int main()
 {
+	
+	vector<string> imgs;
 
+	/*
+	string firstImg="D:\\样本集\\stisample\\seq02-img-right\\image_00000930";
+	for (int i = 0; i < 50; i++)
+	{
+		imgs.push_back(firstImg+"_1.png");
+		addOne(firstImg);
+	}*/
+
+    imgs.push_back("D:\\样本集\\3d\\35m3\\14472237-2015-05-14-135632.jpg");
+	imgs.push_back("D:\\样本集\\3d\\35m3\\14472237-2015-05-14-135707.jpg");
+	imgs.push_back("D:\\样本集\\3d\\35m3\\14472237-2015-05-14-135723.jpg");
 	VideoProcessor vedio;
 	PF_Tracker tracker;
-    //vedio.setInput("D:\\样本集\\跟踪遮挡\\实验样本\\rotate.avi");
-	vedio.setInput("D:\\样本集\\跟踪\\vot2013\\iceskater.avi");
-	//vedio.setInput("D:\\样本集\\跟踪遮挡\\occ\\20.avi");
+	vedio.setInput(imgs);
+	//vedio.setInput("D:\\样本集\\3d\\Capture_20150915_1.mp4");
+	
 	vedio.displayOutput("Output");
 	vedio.setFrameProcessor(&tracker);
 	vedio.setDelay(30);
 	vedio.run();
-
-	/*
-	Mat src1 = imread(imgPath+"00000001.jpg");
-	Mat src2 = imread(imgPath+"00000002.jpg");
-
-	vector<cv::Mat> imgs; 
-	vector<vector<cv::KeyPoint> > imgpts;
-	vector<DMatch> matches;
-
-	imgs.push_back(src1);
-	imgs.push_back(src2);
-
-	OFFeatureMatcher offMatcher(imgs, imgpts);
-	offMatcher.MatchFeatures(0, 1, &matches);
-
-	ShowMatchResult(src1, src2, imgpts[0], imgpts[1], matches);*/
-
 	return 0;
 }
