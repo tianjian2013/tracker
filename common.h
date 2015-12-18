@@ -23,6 +23,7 @@
 #include <list>
 #include <set>
 #include <queue>
+#include <string>
 
 /* cv color*/
 #define YELLOW Scalar(0,255,255)
@@ -54,7 +55,7 @@
 using namespace cv;
 using namespace std;
 
-const string imgPath = "D:\\样本集\\跟踪\\vot2015\\iceskater2\\";
+
 
 void KeyPointsToPoints(const vector<KeyPoint>& kps, vector<Point2f>& ps);
 
@@ -81,5 +82,11 @@ struct CloudPoint
 
 
 std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts);
+vector <string> makeImgsVector(const string &path, int len);
+
+
+const string imgPath = "D:\\样本集\\跟踪\\vot2015\\iceskater1\\";
+const int vedioLength = 661;
+
 
 #endif

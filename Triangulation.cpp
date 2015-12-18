@@ -187,7 +187,8 @@ double TriangulatePoints(const vector<KeyPoint>& pt_set1,
 #else
 	Mat_<double> KP1 = K * Mat(P1);
 #pragma omp parallel for num_threads(1)
-	for (int i=0; i<pts_size; i++) {
+	for (int i=0; i<pts_size; i++) 
+	{
 		Point2f kp = pt_set1[i].pt; 
 		Point3d u(kp.x,kp.y,1.0);
 		Mat_<double> um = Kinv * Mat_<double>(u); 

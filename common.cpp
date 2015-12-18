@@ -62,3 +62,15 @@ std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts)
 	}
 	return out;
 }
+
+vector <string> makeImgsVector(const string &path, int len)
+{
+    string firstImg = "00000000";
+	vector <string> ret;
+	for (int i = 0; i < len; i++)
+	{
+		addOne(firstImg);
+		ret.push_back(path+firstImg+".jpg");
+	}
+	return ret;
+}

@@ -65,6 +65,7 @@ typedef struct particle {
   int height;       /**< original height of region described by particle */
   histogram* histo; /**< reference histogram describing region being tracked */
   float w;          /**< weight */
+  //Rect * ptrPatches;
 } particle;
 
 
@@ -72,17 +73,29 @@ typedef struct particle {
 
 class PF_Tracker:public FrameProcessor
 {
-public:
-	int frameNum,frameheight,framewidth;
-	Rect boundary;
+//public:
+	int frameNum, frameheight, framewidth;
 
-	 gsl_rng* rng;
-	 Mat frame,hsv_frame,hsv_ref_imgs;
-	 histogram* ref_histo;
-	 particle* particles, * new_particles;
-     Scalar color;
-	 Rect region;
-	 int num_particles;
+	Rect boundary;
+	Rect targetRegion;
+	Rect searchArea;
+
+	gsl_rng* rng;
+
+	Mat frame,hsv_frame,hsv_ref_imgs, preFrame, showImg, roi;
+
+
+	vector < Mat > splithsv;
+	vector < Mat > IIV_T;  //目标积分图
+	Mat mask;
+
+	
+	histogram* ref_histo;
+	particle* particles, * new_particles;
+    Scalar color;
+	int num_particles;
+	vector <Rect> patches;
+	int NumPatches;
 
 public:
 	PF_Tracker();
@@ -96,10 +109,16 @@ private:
 	particle* init_distribution( Rect region, histogram* &histo, int p);
 	particle transition( particle p, int w, int h, gsl_rng* rng );
 	void normalize_weights( particle* particles, int n );
-	float likelihood( Mat &img, int r, int c,int w, int h, histogram* ref_histo );
+	float likelihood( Mat &img, int r, int c,int w, int h, histogram* ref_histo);//, vector <Rect> &particlePatches );
 	float histo_dist_sq( histogram* h1, histogram* h2 );
 	particle* resample( particle* particles, int n );
 	//int particle_cmp( void* p1, void* p2 );
+	void makePatches();
+	void trackPatches();
+	double matchTlt(Mat src,Mat dst,Point& maxLoc);
+
+	void compute_IH ();
+	void compute_histogram (Rect r,vector < int >& hist);
 
 //sfm 
 private:
