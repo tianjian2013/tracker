@@ -85,8 +85,12 @@ std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts)
 vector <string> makeImgsVector(const string &path, int len);
 
 
-const string imgPath = "D:\\样本集\\跟踪\\vot2015\\iceskater1\\";
+const string libraryPath = "D:\\样本集\\跟踪\\vot2015\\";
+const string vedioName = "iceskater1";
 const int vedioLength = 661;
+
+//const string imgPath = "D:\\样本集\\跟踪\\vot2015\\bag\\";
+
 
 
 #endif

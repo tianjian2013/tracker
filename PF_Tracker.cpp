@@ -85,46 +85,30 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		}
 		cvDestroyWindow("SelectObject");
 		targetRegion = box;
-
-
+		init();
+		return;
+	}
+	waitKey();
+	if (frameNum == 4)
+	{
 		searchArea.x = targetRegion.x - targetRegion.width;
         searchArea.y = targetRegion.y - targetRegion.height;
 	    searchArea.width = targetRegion.width * 3;
 	    searchArea.height = targetRegion.height * 3;
 	    searchArea &= boundary;
-		cout<< searchArea<<endl;
-		roi=input(searchArea);
+		roi=frame(searchArea);
 	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
         split(hsv_frame, splithsv);
         compute_IH();
-		/*int  sum=0;
-		for (vector < Mat >::iterator it = IIV_T.begin() ; it != IIV_T.end() ; it++ ) 
-	    {
-			sum += (*it).at<int>(searchArea.height-1,searchArea.width-1);
-		}
-		Scalar s=mean(mask);
-		cout<<s*searchArea.area()/255<<endl;*/
-		//imshow("h", splithsv[1]);
-		vector<int> hisTarget, hisSearchArea;
-		compute_histogram(targetRegion, hisTarget);
-		compute_histogram(searchArea, hisSearchArea);
-		imshow("mask", mask);
-		waitKey();
+		imshow("roi",roi);
 
-		makePatches();
-		for (int i = 0; i < patches.size(); i++)
-		{
-			rectangle(output, patches[i], GREEN, 2); 
-		}
-		ref_histo = compute_ref_histos(hsv_frame, targetRegion);
-		particles = init_distribution(targetRegion, ref_histo, num_particles);
-		preFrame = frame;
-
-
-
-		return;
+		//vector<int> hisTarget, hisSearchArea;
+		//compute_histogram(targetRegion, hisTarget);
+		//compute_histogram(searchArea, hisSearchArea);
 	}
+	
 
+	/*
 	//perform prediction and measurement for each particle 
 	for( int j = 0; j < num_particles; j++ )
 	{
@@ -169,9 +153,7 @@ void PF_Tracker::process(Mat & input,Mat & output)
 	{
 		rectangle(showImg, patches[i], GREEN, 2); 
 	}
-	
-
-	//trackPatches();
+	//trackPatches();*/
 	preFrame = frame;
 }
 
@@ -510,8 +492,74 @@ particle* PF_Tracker::resample( particle* particles, int n )
   return new_particles;
 }
 
+bool patchCmp(const Patch & p1, const Patch & p2)
+{
+	return p1.confidence > p2.confidence;
+}
 void PF_Tracker::makePatches()
 {
+	vector <Patch> initPatches;
+	Rect region=targetRegion;
+	region.x-=searchArea.x;
+    region.y-=searchArea.y;
+	Rect r(region.x+1, region.y+1, patchSize, patchSize);
+
+	
+	while (r.y < region.y+region.height - patchSize)
+	{
+
+		while (r.x < region.x+region.width - patchSize)
+		{
+			Patch tmp;
+			tmp.r = r;
+			Scalar s = mean(pToObject(r));
+			tmp.confidence = s[0];
+			initPatches.push_back(tmp);
+			r.x += patchSize;
+		}
+		r.y += patchSize;
+		r.x = region.x+1;
+	}
+	sort(initPatches.begin(), initPatches.end(), patchCmp);
+    int k = 0;
+
+
+	//vector <Patch > initPatches1;
+	while (vpatches.size() < patchNum && k < initPatches.size())
+	{
+		bool canAdd = true;
+		for (int i = 0; i < vpatches.size(); i++)
+		{
+			if (distance(vpatches[i].r,initPatches[k].r) < patchSize*2)
+			{
+				canAdd = false;
+				break;
+				//initPatches1.push_back(initPatches[k]);
+			}
+		}
+		if (canAdd)
+		{
+			vpatches.push_back(initPatches[k]);
+		}
+		k++;
+	}
+	
+	for (int i = 0; i < vpatches.size(); i++)
+	{
+			vpatches[i].r.x+= searchArea.x;
+			vpatches[i].r.y+= searchArea.y;
+			compute_histogram (vpatches[i].r,vpatches[i].histogram);	
+			rectangle(showImg, vpatches[i].r, GREEN, 2); 
+	}
+
+	/*for (int i = 0; i< patchNum;i++)
+	{
+		compute_histogram (vpatches[i].r,vpatches[i].histogram);	
+	}*/
+
+	//cout << initPatches[0].confidence<<endl;
+	//cout << initPatches[1].confidence<<endl;
+	/*
 	while (patches.size() < NumPatches)
 	{
 		Rect r;
@@ -528,7 +576,7 @@ void PF_Tracker::makePatches()
 			r &= targetRegion;
 			patches.push_back(r);
 		}
-	}
+	}*/
 }
 
 void PF_Tracker::trackPatches()
@@ -739,34 +787,11 @@ void PF_Tracker::sfm()
 
 void PF_Tracker::compute_IH ()
 {
+	inRange(hsv_frame, Scalar(0, S_THRESH*255, V_THRESH*255), Scalar(181, 256, 256), mask);
 	int sum = 0;
-	cout << splithsv[0].type()<<endl;
-	cout << splithsv[1].type()<<endl;
-
-
-	/*for (int i = 1; i < searchArea.height; i++)
-	{
-		for (int j = 1; j < searchArea.width; j++)
-		{
-			int hIndex = splithsv[0].at<int>(i, j) * NH/ 181;
-			cout <<hIndex<<",";
-		}
-		cout <<endl;
-	}*/
-
-
-	vector <vector < vector<int> > > hisIntegral(NH * NS, vector < vector<int> > (searchArea.height, vector<int> (searchArea.width,0)));
-	/*for (int i = 0; i < NH * NS;i ++)
-	{
-		vector < vector<int> > m(searchArea.height, vector<int> (searchArea.width,0));
-		hisIntegral.push_back(m);
-	}*/
-	//int hIndex = splithsv[0].at<uchar>(0, 0) * NH/ 181;
-	//int sIndex = splithsv[1].at<uchar>(0, 0) * NS/ 256;
-	//int k = 10 * hIndex + sIndex; // 10 == NH
-
 	int loc00 = 10 * splithsv[0].at<uchar>(0, 0) * NH/ 181 + splithsv[1].at<uchar>(0, 0) * NS/ 256;
-	hisIntegral[loc00][0][0] = 1;
+	if (mask.at<uchar>(0,0) )
+		hisIntegral[loc00][0][0] = 1;
 	for (int i = 1; i < searchArea.height; i++)
 	{
 		int hIndex = splithsv[0].at<uchar>(i, 0) * NH/ 181;
@@ -777,7 +802,8 @@ void PF_Tracker::compute_IH ()
 				hisIntegral[l][i][0] =    hisIntegral[l][i-1][0];
 										
 		}
-		hisIntegral[k][i][0] += 1;		
+		if (mask.at<uchar>(i,0) )
+		  hisIntegral[k][i][0] += 1;		
 	}
 
 	for (int i = 1; i < searchArea.width; i++)
@@ -790,7 +816,8 @@ void PF_Tracker::compute_IH ()
 				hisIntegral[l][0][i] =    hisIntegral[l][0][i-1];
 										
 		}
-		hisIntegral[k][0][i] += 1;		
+		if (mask.at<uchar>(0,i) )
+			hisIntegral[k][0][i] += 1;		
 	}
 
 	for (int i = 1; i < searchArea.height; i++)
@@ -807,78 +834,140 @@ void PF_Tracker::compute_IH ()
 									     + hisIntegral[l][i-1][j]
 										 - hisIntegral[l][i-1][j-1]; 
 			}
-			//if (k > 99) k = 99;
-			hisIntegral[k][i][j] += 1;		
-			//cout <<i<<","<<j<<endl;
+			if (mask.at<uchar>(i,j) )
+				hisIntegral[k][i][j] += 1;		
+			
 		}
 	}
 	for (int i = 0; i < NH * NS;i ++)
 	{
 		sum += hisIntegral[i][searchArea.height - 1][searchArea.width - 1];
 	}
-	cout<<sum<<endl;
-	cout<<searchArea.area()<<endl;
-	/*IIV_T.clear();
-	inRange(hsv_frame, Scalar(0, S_THRESH*255, V_THRESH*255), Scalar(181, 256, 256), mask);
-	cout << countNonZero(mask) <<endl;
-	cout << hsv_frame.cols * hsv_frame.rows<<endl;
-	int sum = 0;
-	for (int i=0; i<NH; i++)
-	{
-		Mat binh;
-	    inRange(splithsv[0],180*i/NH,180*(i+1)/NH,binh);
-		//binh.convertTo(binh,-1,1.0,-254);
-		for (int j=0; j<NS; j++) 
-		{
-	          Mat bins;
-	          inRange(splithsv[1],255*i/NS,255*(i+1)/NS,bins);
-	         // bins.convertTo(bins,-1,1.0,-254);
-			 // Mat binbin=10*binh+bins;
-			  Mat binbin=binh&bins;
-			  //binbin&=mask;
-			  binbin /= 255;
-			  Mat output;
-			  integral(binbin,output);
-			  sum += output.at<int>(searchArea.height,searchArea.width);
-			  IIV_T.push_back(output);
-		 }
-	 }
-	cout<<sum<<endl;*/
+	
 	
 }
 
+int PF_Tracker::distance(const Rect& r1, const Rect& r2)
+{
+	return std::max( abs(r1.x - r2.x), abs(r1.y - r2.y));
+}
 
 void PF_Tracker::compute_histogram (Rect r,vector < int >& hist)
 {
 	r.x-=searchArea.x;
 	r.y-=searchArea.y;
-	Rect boud=Rect(0,0,searchArea.width,searchArea.height);
+	Rect boud=Rect(0,0,searchArea.width-1,searchArea.height-1);
 	r&=boud;
 
 	int left , up , diag;
-	double sum = 0;
-	double z;
-	for (vector < Mat >::iterator it = IIV_T.begin() ; it != IIV_T.end() ; it++ ) 
+	//double sum = 0;
+	int z;
+	//for (vector < Mat >::iterator it = IIV_T.begin() ; it != IIV_T.end() ; it++ ) 
+	for (int l = 0; l < NH * NS; l++)
 	{
 		if ( r.x == 0 ) {
 			left = 0;
 			diag = 0;
 		} else {
-			left = (*it).at<int>(r.y+r.height , r.x );
+			left = hisIntegral[l][r.y+r.height-1][r.x-1];
 		}
 
 		if ( r.y == 0 ) {
 			up = 0;
 			diag = 0;
 		} else {
-			up = (*it).at<int>(r.y , r.x +r.width);
+			up = hisIntegral[l][r.y-1][r.x +r.width-1];
 		
 		}
 		if ( r.x > 0 && r.y > 0 ) {
-			diag = (*it).at<int>(r.y , r.x );
+			diag = hisIntegral[l][r.y-1][r.x-1];
 		}
-		z =(*it).at<int>(r.y+r.height , r.x +r.width) - left - up + diag;
+		z =hisIntegral[l][r.y+r.height][r.x +r.width] - left - up + diag;
 		hist.push_back(z);
-		sum += z;
+		//sum += z;
 	}
+}
+
+
+void PF_Tracker::init()
+{
+	    searchArea.x = targetRegion.x - targetRegion.width;
+        searchArea.y = targetRegion.y - targetRegion.height;
+	    searchArea.width = targetRegion.width * 3;
+	    searchArea.height = targetRegion.height * 3;
+	    searchArea &= boundary;
+		
+	    for (int i = 0; i < NH * NS;i ++)
+	    {
+			vector < vector<int> > m(searchArea.height, vector<int> (searchArea.width,0));
+			hisIntegral.push_back(m);
+		}
+		roi=frame(searchArea);
+	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
+        split(hsv_frame, splithsv);
+        compute_IH();
+		vector<int> hisTarget, hisSearchArea;
+		compute_histogram(targetRegion, hisTarget);
+		compute_histogram(searchArea, hisSearchArea);
+
+
+		/*
+		Mat hsvTemp;
+		vector<Mat> splithsvTemp;
+		cvtColor(frame,hsvTemp, CV_BGR2HSV);
+	    split(hsvTemp, splithsvTemp);
+		Mat pToObjectShow(boundary.height+1, boundary.width+1, CV_8UC3);
+		for (int i = 0; i <= boundary.height; i++)
+		{
+			for (int j = 0; j <= boundary.width; j++)
+			{
+				int hIndex = splithsvTemp[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsvTemp[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				pToObjectShow.at<cv::Vec3b>(i,j)[1] = 0;
+				pToObjectShow.at<cv::Vec3b>(i,j)[0] = 0;
+				if (hisSearchArea[k] == 0)
+				{
+					//pToObject.at<cv::Vec3b>(i,j)[2]= 0;
+				    pToObjectShow.at<cv::Vec3b>(i,j)[2]= 0;
+				}
+				else
+				{
+					pToObjectShow.at<cv::Vec3b>(i,j)[2]= hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+					//pToObject.at<cv::Vec3b>(i,j)[2] = hisTarget[k]*255/(hisTarget[k]+hisBackground[k]) *3 /2;
+				}
+
+			}
+		}
+		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "0.jpg",showImg);
+		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "1.jpg",pToObjectShow);
+		*/
+
+		pToObject.create(searchArea.height, searchArea.width, CV_8UC1);
+		for (int i = 0; i < searchArea.height; i++)
+		{
+			for (int j = 0; j < searchArea.width; j++)
+			{
+				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				if (hisSearchArea[k] == 0)
+				{
+				    pToObject.at<uchar>(i,j)= 0;
+				}
+				else
+				{
+					 pToObject.at<uchar>(i,j)  = hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+				}
+			}
+		}
+		rectangle(showImg, targetRegion, GREEN, 1); 
+		//imshow("mask", mask);
+		//imshow("pToObject", pToObject);
+		makePatches();
+		
+		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "2.jpg",showImg);
+		//ref_histo = compute_ref_histos(hsv_frame, targetRegion);
+		//particles = init_distribution(targetRegion, ref_histo, num_particles);
+		preFrame = frame;
 }

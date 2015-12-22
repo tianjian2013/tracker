@@ -69,11 +69,21 @@ typedef struct particle {
 } particle;
 
 
+class Patch
+{
+public:
+	Rect r;
+	vector <int> histogram;
+	double confidence;
+};
+
 
 
 class PF_Tracker:public FrameProcessor
 {
 //public:
+	static const int patchSize = 25;
+	static const int patchNum = 1;
 	int frameNum, frameheight, framewidth;
 
 	Rect boundary;
@@ -83,7 +93,6 @@ class PF_Tracker:public FrameProcessor
 	gsl_rng* rng;
 
 	Mat frame,hsv_frame,hsv_ref_imgs, preFrame, showImg, roi;
-
 
 	vector < Mat > splithsv;
 	vector < Mat > IIV_T;  //目标积分图
@@ -119,6 +128,13 @@ private:
 
 	void compute_IH ();
 	void compute_histogram (Rect r,vector < int >& hist);
+	vector <vector < vector<int> > > hisIntegral;
+	Mat pToObject;
+	vector < Patch> vpatches;
+	int distance(const Rect& r1, const Rect& r2);
+
+
+	void init();
 
 //sfm 
 private:

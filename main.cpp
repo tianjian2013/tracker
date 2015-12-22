@@ -2,6 +2,7 @@
 
 int main()
 {
+	string imgPath = libraryPath+vedioName+"\\";
 	vector<string> imgs = makeImgsVector(imgPath, vedioLength);
 	VideoProcessor vedio;
 	PF_Tracker tracker;
