@@ -91,7 +91,7 @@ class PF_Tracker:public FrameProcessor
 //public:
 	static const int patchSize = 15;
 	static const int neNum = 3;
-	static const int patchNum = 4;
+	static const int patchNum = 5;
 
 	int frameNum, frameheight, framewidth;
 
@@ -139,7 +139,11 @@ private:
 	void compute_IH ();
 	void compute_histogram (Rect r,vector < int >& hist);
 	vector <vector < vector<int> > > hisIntegral;
-	Mat pToObject;
+
+	vector<int> hisTarget, hisSearchArea,hisBackground;
+	vector< double> hisTargetNorm, hisSearchAreaNorm,hisBackgroundNorm;
+	//Mat pToObject, pToObject1;
+	Mat  pToObject1;
 	vector < Patch> vpatches;
 	int distance(const Rect& r1, const Rect& r2);
 	int l2distance(const Rect& r1, const Rect& r2);

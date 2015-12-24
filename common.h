@@ -84,6 +84,9 @@ struct CloudPoint
 std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts);
 vector <string> makeImgsVector(const string &path, int len);
 void showVector(vector <int> & v);
+void weightAdd(vector <int> & v1, vector <int> & v2);
+vector < double> NormHis(vector <int> & v);
+void weightAdd(vector <double> & v1, vector <double> & v2);
 
 const string libraryPath = "D:\\Ñù±¾¼¯\\¸ú×Ù\\vot2015\\";
 const string vedioName = "iceskater1";

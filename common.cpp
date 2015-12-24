@@ -84,3 +84,37 @@ void showVector(vector <int> & v)
 	cout<<endl;
 
 }
+
+void weightAdd(vector <int> & v1, vector <int> & v2)
+{
+	for (int i = 0;i < v1.size();i++)
+	{
+		v1[i] = v1[i]*9 / 10 + v2[i]/10;
+	}
+
+}
+
+void weightAdd(vector <double> & v1, vector <double> & v2)
+{
+	for (int i = 0;i < v1.size();i++)
+	{
+		v1[i] = v1[i]*9 / 10 + v2[i]/10;
+	}
+
+}
+
+vector < double> NormHis(vector <int> & v)
+{
+	double sum= 0.0;
+    for (int i = 0;i < v.size();i++)
+	{
+		sum += v[i];  //1[i]*9 / 10 + v2[i]/10;
+	}
+	vector < double> ret;
+	for (int i = 0;i < v.size();i++)
+	{
+		ret.push_back(v[i]/sum);
+	}
+	return ret;
+
+}

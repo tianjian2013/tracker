@@ -7,6 +7,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include<opencv2/nonfree/nonfree.hpp>
 #include<opencv2/legacy/legacy.hpp>
+#include <math.h>
 
 //---gsl的库文件-----------
 #pragma comment (lib, "libgsl.a")
@@ -256,9 +257,9 @@ void PF_Tracker::process(Mat & input,Mat & output)
 				else
 				{
 					sort(vvpatchesINaPaticle[j].begin(),vvpatchesINaPaticle[j].end(),patchCmp1);
-					if (vvpatchesINaPaticle[j].size()>5) 
+					if (vvpatchesINaPaticle[j].size()>8) 
 					{
-							vvpatchesINaPaticle[j].resize(5);
+							vvpatchesINaPaticle[j].resize(8);
 					}
 				}
 			}
@@ -294,7 +295,7 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		for (int k =0; k<patchNum; k++)
 		{
 			vpatches[k].r = vpatchResult[k].r;
-			vpatches[k].histogram = vpatchResult[k].histogram;
+			//vpatches[k].histogram = vpatchResult[k].histogram;
 			newFocus.x += vpatches[k].r.x;
 			newFocus.y += vpatches[k].r.y;
 			rectangle(showImg, vpatchResult[k].r, GREEN, 1);
@@ -306,6 +307,68 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		Focus=newFocus;
 		rectangle(showImg, targetRegion, GREEN, 1);
 	}
+
+	vector<int> hisTargetNew, hisSearchAreaNew,hisBackgroundNew;
+	compute_histogram(targetRegion, hisTargetNew);
+	compute_histogram(searchArea, hisSearchAreaNew);
+	for (int i = 0; i< hisTarget.size(); i++)
+	{
+		hisBackgroundNew.push_back(hisSearchAreaNew[i] - hisTargetNew[i]);
+	}
+	vector < double>  hisTargetNormNew = NormHis(hisTargetNew);
+	vector < double>  hisBackgroundNormNew = NormHis(hisBackgroundNew);
+	weightAdd( hisTargetNorm,  hisTargetNormNew);
+    weightAdd( hisBackgroundNorm,  hisBackgroundNormNew);
+
+	pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
+	for (int i = 0; i < searchArea.height; i++)
+	{
+		for (int j = 0; j < searchArea.width; j++)
+		{
+				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				if (mask.at<uchar>(i,j) == 0)
+				{
+				    pToObject1.at< double>(i,j)= 0;
+				}
+				else
+				{
+					 pToObject1.at<double>(i,j)  = log(hisTargetNorm[k]) - log(hisBackgroundNorm[k]) ;//hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+				}
+		}
+	}
+	imshow("log", pToObject1 );
+
+
+
+
+
+	/*
+	pToObject.create(searchArea.height, searchArea.width, CV_8UC1);
+
+	for (int i = 0; i < searchArea.height; i++)
+	{
+			for (int j = 0; j < searchArea.width; j++)
+			{
+				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				if (hisSearchArea[k] == 0)
+				{
+				    pToObject.at<uchar>(i,j)= 0;
+				}
+				else
+				{
+					 pToObject.at<uchar>(i,j)  = hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+				}
+			}
+	}
+	//imshow("mask", mask);
+	imshow("pToObject", pToObject);*/
+
+	//vpatches.clear();
+	//makePatches();
 	calcW();
 	/*
 	//perform prediction and measurement for each particle 
@@ -732,7 +795,7 @@ void PF_Tracker::makePatches()
 			Rect rt=r;
 			rt.x -= searchArea.x;
 			rt.y -= searchArea.y;
-			Scalar s = mean(pToObject(rt));
+			Scalar s = mean(pToObject1(rt));
 			tmp.confidence = s[0];
 			initPatches.push_back(tmp);
 			r.x += patchSize;
@@ -1086,6 +1149,7 @@ int PF_Tracker::l2distance(const Rect& r1, const Rect& r2)
 
 void PF_Tracker::compute_histogram (Rect r,vector < int >& hist)
 {
+	hist.clear();
 	r.x-=searchArea.x;
 	r.y-=searchArea.y;
 	Rect boud=Rect(0,0,searchArea.width-1,searchArea.height-1);
@@ -1138,10 +1202,35 @@ void PF_Tracker::init()
 	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
         split(hsv_frame, splithsv);
         compute_IH();
-		vector<int> hisTarget, hisSearchArea;
+		
 		compute_histogram(targetRegion, hisTarget);
 		compute_histogram(searchArea, hisSearchArea);
+		for (int i = 0; i< hisTarget.size(); i++)
+		{
+			hisBackground.push_back(hisSearchArea[i] - hisTarget[i]);
+		}
 
+		hisTargetNorm = NormHis(hisTarget);
+		hisBackgroundNorm = NormHis(hisBackground);
+		pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
+		for (int i = 0; i < searchArea.height; i++)
+		{
+			for (int j = 0; j < searchArea.width; j++)
+			{
+				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				if (mask.at<uchar>(i,j) == 0)
+				{
+				    pToObject1.at< double>(i,j)= 0;
+				}
+				else
+				{
+					 pToObject1.at<double>(i,j)  = log(hisTargetNorm[k]) - log(hisBackgroundNorm[k]) ;//hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+				}
+			}
+		}
+		imshow("log", pToObject1 );
 
 		/*
 		Mat hsvTemp;
@@ -1174,25 +1263,6 @@ void PF_Tracker::init()
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "0.jpg",showImg);
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "1.jpg",pToObjectShow);
 		*/
-
-		pToObject.create(searchArea.height, searchArea.width, CV_8UC1);
-		for (int i = 0; i < searchArea.height; i++)
-		{
-			for (int j = 0; j < searchArea.width; j++)
-			{
-				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
-			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
-				int k = 10 * hIndex + sIndex;
-				if (hisSearchArea[k] == 0)
-				{
-				    pToObject.at<uchar>(i,j)= 0;
-				}
-				else
-				{
-					 pToObject.at<uchar>(i,j)  = hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
-				}
-			}
-		}
 		rectangle(showImg, targetRegion, GREEN, 1); 
 		//imshow("mask", mask);
 		//imshow("pToObject", pToObject);
