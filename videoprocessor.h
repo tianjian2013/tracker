@@ -473,6 +473,8 @@ class VideoProcessor {
 					frameProcessor->process(frame,output);
 				// increment frame number
 
+				
+
 				t = (double)cvGetTickCount() - t;
 		        //std::cout << "cost time: " << t / ((double)cvGetTickFrequency()*1000.) << std::endl;
 

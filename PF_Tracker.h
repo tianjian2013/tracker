@@ -74,7 +74,14 @@ class Patch
 public:
 	Rect r;
 	vector <int> histogram;
-	double confidence;
+	float confidence;
+	Patch()
+	{
+
+	}
+	Patch(Rect rr, float c): r(rr), confidence(c)
+	{
+	}
 };
 
 
@@ -82,12 +89,15 @@ public:
 class PF_Tracker:public FrameProcessor
 {
 //public:
-	static const int patchSize = 25;
-	static const int patchNum = 1;
+	static const int patchSize = 15;
+	static const int neNum = 3;
+	static const int patchNum = 4;
+
 	int frameNum, frameheight, framewidth;
 
 	Rect boundary;
 	Rect targetRegion;
+	Point Focus;
 	Rect searchArea;
 
 	gsl_rng* rng;
@@ -132,9 +142,19 @@ private:
 	Mat pToObject;
 	vector < Patch> vpatches;
 	int distance(const Rect& r1, const Rect& r2);
-
-
+	int l2distance(const Rect& r1, const Rect& r2);
+	float distance ( const vector <int> &v1 , const vector <int> &v2 );
+	Mat clacWij(int row, vector <int> indexes);
 	void init();
+	void calcW();
+	Mat W;
+	Mat T;
+	vector <vector <int>> neighbors;
+	//void score(vector <vector < Patch> >  & vvpatches);
+	vector< Scalar> showColors;
+	float solveIP(Rect region, vector <vector < Patch> >  &vvpatches, vector <int> & locationIndexes);
+
+
 
 //sfm 
 private:

@@ -33,7 +33,27 @@ int particle_cmp( const void* p1,const  void* p2 )
     return 1;
   return 0;
 }
+bool patchCmp(const Patch & p1, const Patch & p2)
+{
+	return p1.confidence > p2.confidence;
+}
+bool patchCmp1(const Patch & p1, const Patch & p2)
+{
+	return p1.confidence < p2.confidence;
+}
 
+float absSum(Mat &m)
+{
+	float sum;
+	for (int i = 0; i< m.rows;i++)
+	{
+		for(int j = 0;j <m.cols;j++)
+		{
+			sum+= abs( m.at<float>(i,j) );
+		}
+	}
+	return sum;
+}
 
 //static const double distcoeff[]={0.03489 ,  -0.25811,   -0.00048,   0.00330,  0.00000};
 
@@ -58,9 +78,32 @@ PF_Tracker::PF_Tracker():frameNum(0)
                                0, 0, 1);
 	*/						   
   // K = (Mat_ <double>(3, 3) <<7176.13570  ,0,662.33685,0, 7173.11117,681.71742 ,0,0,1);
+   showColors.push_back(YELLOW);
+   showColors.push_back(BLUE);
+   showColors.push_back(GREEN);
+   showColors.push_back(RED);
+   showColors.push_back(PURPLE);
 
+   W = Mat::zeros(patchNum,patchNum,CV_32F);
+   T.create(patchNum, 2,CV_32F);
+}
+
+void generateIndexes(vector <vector<int>> &OneSituation, vector <int> &sizes, int index, vector<int> &base)
+{
+	if (index == sizes.size())
+	{
+		OneSituation.push_back(base);
+		return ;
+	}
+	for (int i = 0; i < sizes[index]; i++)
+	{
+		base.push_back(i);
+		generateIndexes(OneSituation, sizes, index+1, base);
+		base.pop_back();
+	}
 
 }
+
 
 void PF_Tracker::process(Mat & input,Mat & output)
 {
@@ -86,10 +129,20 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		cvDestroyWindow("SelectObject");
 		targetRegion = box;
 		init();
+		
+		stringstream ss;
+		string str;
+		ss<<frameNum;
+		ss>>str;
+		imwrite(outputImgPath+str+".jpg",showImg);
 		return;
 	}
+	/*if(frameNum <20  && frameNum >2 )
+	{
+		return ;
+	}*/
 	waitKey();
-	if (frameNum == 4)
+	if (1)  // (frameNum == 20)
 	{
 		searchArea.x = targetRegion.x - targetRegion.width;
         searchArea.y = targetRegion.y - targetRegion.height;
@@ -100,14 +153,160 @@ void PF_Tracker::process(Mat & input,Mat & output)
 	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
         split(hsv_frame, splithsv);
         compute_IH();
-		imshow("roi",roi);
+		//imshow("roi",roi);
 
-		//vector<int> hisTarget, hisSearchArea;
-		//compute_histogram(targetRegion, hisTarget);
-		//compute_histogram(searchArea, hisSearchArea);
+		rectangle(showImg, searchArea,RED);
+
+		vector < Rect> vRegionSearchRect;
+
+		Rect regionSearchRect = targetRegion;
+		regionSearchRect.x = targetRegion.x -patchSize;
+		regionSearchRect.y = targetRegion.y -patchSize;
+		for (; regionSearchRect.y < targetRegion.y+patchSize
+			 ; regionSearchRect.y += 4)  //.y < vpatches[i].r.y + vpatches[i].r.height; patchSearchRect.y += patchSize/2)
+		{
+			for (; regionSearchRect.x < targetRegion.x+patchSize
+				    ; regionSearchRect.x += 4)
+			  {
+				  //circle(showImg, Point( regionSearchRect.x, regionSearchRect.y) ,2 ,RED);
+				  //rectangle(showImg, regionSearchRect,showColors[rand()%4]);
+				 // imshow("case", showImg(regionSearchRect));
+				  //waitKey();
+				  vRegionSearchRect.push_back(regionSearchRect);
+			  }
+			  regionSearchRect.x = targetRegion.x -patchSize;
+		}
+		/*
+		Rect regionSearchRect = targetRegion;
+		regionSearchRect.x = searchArea.x + 1 + patchSize;
+		regionSearchRect.y = searchArea.y + 1 + patchSize;
+		for (; (regionSearchRect&searchArea) ==  regionSearchRect; regionSearchRect.y += patchSize/2)  //.y < vpatches[i].r.y + vpatches[i].r.height; patchSearchRect.y += patchSize/2)
+		{
+		      for (; (regionSearchRect&searchArea) ==  regionSearchRect; regionSearchRect.x += patchSize/2)
+			  {
+				  //circle(showImg, Point( regionSearchRect.x, regionSearchRect.y) ,2 ,RED);
+				  //rectangle(showImg, regionSearchRect,showColors[rand()%4]);
+				 // imshow("case", showImg(regionSearchRect));
+				  //waitKey();
+				  vRegionSearchRect.push_back(regionSearchRect);
+			  }
+			  regionSearchRect.x = searchArea.x + 1 + patchSize;
+		}*/
+		cout<< vRegionSearchRect.size() <<endl;
+
+		vector <vector < Patch> >  vvpatches(patchNum, vector < Patch>() );
+		vector<int> sizes;
+		for (int i = 0; i < patchNum; i++)
+		{
+			Rect patchSearchRect = vpatches[i].r;
+			patchSearchRect.x -=  patchSearchRect.width ;
+		    patchSearchRect.y -=  patchSearchRect.height;
+			for (; patchSearchRect.y < vpatches[i].r.y + vpatches[i].r.height; patchSearchRect.y += patchSize/3)
+		    {
+				for (; patchSearchRect.x < vpatches[i].r.x + vpatches[i].r.width; patchSearchRect.x += patchSize/3)
+			    {
+					vector <int> tempHis;
+				    compute_histogram (patchSearchRect ,tempHis);
+				    float dis = distance(tempHis,vpatches[i].histogram);
+				    if (dis < 0.1)
+					{
+						vvpatches[i].push_back(Patch(patchSearchRect,dis));
+						//circle(showImg,Point(patchSearchRect.x, patchSearchRect.y),2,RED);
+					}
+				}
+				patchSearchRect.x = vpatches[i].r.x-patchSearchRect.width;
+			}
+			//sort(vvpatches[i].begin(), vvpatches[i].end(), patchCmp1);
+			/*if (vvpatches[i].size()>10)
+			{
+				vvpatches[i].resize(10);
+			}*/
+			if (vvpatches[i].size() ==0 )
+			{
+				vvpatches[i].push_back(vpatches[i]);
+				//cout<<"vvpatches[].size()"<<i<<","<<vvpatches[i].size()<<endl;
+			}
+			cout<<"vvpatches[].size()"<<i<<","<<vvpatches[i].size()<<endl;
+			
+			sizes.push_back(vvpatches[i].size());
+		}
+		float MAX = 10000;
+		int resultLocationIndex = -1;
+		vector<Patch> vpatchResult;
+
+		for (int i = 0; i < vRegionSearchRect.size(); i++)
+		{
+			vector <vector < Patch> >  vvpatchesINaPaticle(patchNum, vector < Patch>() );
+			int j = 0;
+			for( ; j < patchNum; j++)
+			{
+				int k=0;
+				while ( k <vvpatches[j].size())
+				{
+					if ( (vvpatches[j][k].r&vRegionSearchRect[i]) == vvpatches[j][k].r)
+				    {
+					    vvpatchesINaPaticle[j].push_back(vvpatches[j][k]);
+				    }
+					k++;
+				}
+				if(vvpatchesINaPaticle[j].size() ==0)
+				{
+					break;
+				}
+				else
+				{
+					sort(vvpatchesINaPaticle[j].begin(),vvpatchesINaPaticle[j].end(),patchCmp1);
+					if (vvpatchesINaPaticle[j].size()>5) 
+					{
+							vvpatchesINaPaticle[j].resize(5);
+					}
+				}
+			}
+			if ( j == patchNum)
+			{
+				//circle(showImg, Point( vRegionSearchRect[i].x, vRegionSearchRect[i].y) ,2 ,RED);
+				//rectangle(showImg, vRegionSearchRect[i],showColors[0]);
+				vector <int> locationindexes;
+			    float ret = solveIP(vRegionSearchRect[i], vvpatchesINaPaticle,locationindexes);
+				if (ret< MAX)
+				{
+					MAX = ret;
+					resultLocationIndex = i;
+					vpatchResult.clear();
+					for (int k =0; k<patchNum; k++)
+					{
+						vpatchResult.push_back(vvpatchesINaPaticle[k][locationindexes[k]]);
+					}
+				}
+			}
+		}
+		if (resultLocationIndex >= 0)
+		{
+			cout<<"max : "<<MAX<<endl;
+			//targetRegion = vRegionSearchRect[resultLocationIndex];
+		}
+		
+
+		Point newFocus;
+		newFocus.x = 0;
+		newFocus.y = 0;
+
+		for (int k =0; k<patchNum; k++)
+		{
+			vpatches[k].r = vpatchResult[k].r;
+			vpatches[k].histogram = vpatchResult[k].histogram;
+			newFocus.x += vpatches[k].r.x;
+			newFocus.y += vpatches[k].r.y;
+			rectangle(showImg, vpatchResult[k].r, GREEN, 1);
+		}
+		newFocus.x /= patchNum;
+		newFocus.y /= patchNum;
+		targetRegion.x = targetRegion.x+newFocus.x- Focus.x;
+		targetRegion.y = targetRegion.y+newFocus.y- Focus.y;
+		Focus=newFocus;
+		rectangle(showImg, targetRegion, GREEN, 1);
 	}
-	
-
+	calcW();
 	/*
 	//perform prediction and measurement for each particle 
 	for( int j = 0; j < num_particles; j++ )
@@ -437,6 +636,27 @@ float PF_Tracker::likelihood(Mat& img, int r, int c,int w, int h, histogram* ref
   return exp( -LAMBDA * d_sq );
 }
 
+
+float PF_Tracker::distance ( const vector <int> &v1 , const vector <int> &v2 )
+{
+	vector <float> vv1,vv2;
+	float sum1=0, sum2=0;
+	for (int i = 0; i< v1.size();i++)
+	{
+		sum1 += v1[i];
+		sum2 += v2[i];
+	}
+	for (int i = 0; i< v1.size();i++)
+	{
+		vv1.push_back(v1[i]/sum1);
+		vv2.push_back(v2[i]/sum2);
+	}
+	float sum = 0;
+	for( int i = 0; i < v1.size(); i++ )
+		sum += sqrt( vv1[i]*vv2[i] );
+	return 1.0 - sum;
+
+}
 float PF_Tracker::histo_dist_sq( histogram* h1, histogram* h2 )
 {
   float* hist1, * hist2;
@@ -492,16 +712,13 @@ particle* PF_Tracker::resample( particle* particles, int n )
   return new_particles;
 }
 
-bool patchCmp(const Patch & p1, const Patch & p2)
-{
-	return p1.confidence > p2.confidence;
-}
+
 void PF_Tracker::makePatches()
 {
 	vector <Patch> initPatches;
 	Rect region=targetRegion;
-	region.x-=searchArea.x;
-    region.y-=searchArea.y;
+	//region.x-=searchArea.x;
+    //region.y-=searchArea.y;
 	Rect r(region.x+1, region.y+1, patchSize, patchSize);
 
 	
@@ -512,7 +729,10 @@ void PF_Tracker::makePatches()
 		{
 			Patch tmp;
 			tmp.r = r;
-			Scalar s = mean(pToObject(r));
+			Rect rt=r;
+			rt.x -= searchArea.x;
+			rt.y -= searchArea.y;
+			Scalar s = mean(pToObject(rt));
 			tmp.confidence = s[0];
 			initPatches.push_back(tmp);
 			r.x += patchSize;
@@ -544,13 +764,20 @@ void PF_Tracker::makePatches()
 		k++;
 	}
 	
+	Focus.x = 0;
+	Focus.y = 0;
+
 	for (int i = 0; i < vpatches.size(); i++)
 	{
-			vpatches[i].r.x+= searchArea.x;
-			vpatches[i].r.y+= searchArea.y;
+			//vpatches[i].r.x+= searchArea.x;
+			//vpatches[i].r.y+= searchArea.y;
 			compute_histogram (vpatches[i].r,vpatches[i].histogram);	
 			rectangle(showImg, vpatches[i].r, GREEN, 2); 
+			Focus.x += vpatches[i].r.x;
+			Focus.y += vpatches[i].r.y;
 	}
+	Focus.x /= vpatches.size();
+	Focus.y /= vpatches.size();
 
 	/*for (int i = 0; i< patchNum;i++)
 	{
@@ -852,6 +1079,11 @@ int PF_Tracker::distance(const Rect& r1, const Rect& r2)
 	return std::max( abs(r1.x - r2.x), abs(r1.y - r2.y));
 }
 
+int PF_Tracker::l2distance(const Rect& r1, const Rect& r2)
+{
+	return (r1.x - r2.x)*(r1.x - r2.x)+(r1.y - r2.y)*(r1.y - r2.y);
+}
+
 void PF_Tracker::compute_histogram (Rect r,vector < int >& hist)
 {
 	r.x-=searchArea.x;
@@ -965,9 +1197,279 @@ void PF_Tracker::init()
 		//imshow("mask", mask);
 		//imshow("pToObject", pToObject);
 		makePatches();
-		
+		calcW();
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "2.jpg",showImg);
 		//ref_histo = compute_ref_histos(hsv_frame, targetRegion);
 		//particles = init_distribution(targetRegion, ref_histo, num_particles);
 		preFrame = frame;
 }
+
+
+Mat PF_Tracker::clacWij(int row, vector <int> indexes)
+{
+	Mat Q1(3,3,CV_32F);
+	Q1.at<float>(2,0) = 1.0;
+	Q1.at<float>(2,1) = 1.0;
+	Q1.at<float>(2,2) = 1.0;
+
+	if (indexes.size() != 3 )
+	{
+		cout<<"error : indexes.size() != 3"<<endl;
+		return Mat::zeros(3,1,CV_32F);
+	}
+
+	Q1.at<float>(0,0) = vpatches[indexes[0]].r.x;
+	Q1.at<float>(1,0) = vpatches[indexes[0]].r.y;
+
+	Q1.at<float>(0,1) = vpatches[indexes[1]].r.x;
+	Q1.at<float>(1,1) = vpatches[indexes[1]].r.y;
+
+	Q1.at<float>(0,2) = vpatches[indexes[2]].r.x;
+	Q1.at<float>(1,2) = vpatches[indexes[2]].r.y;
+
+	Mat P1(3,1,CV_32F);
+	P1.at<float>(0,0) = vpatches[row].r.x;
+	P1.at<float>(0,1) = vpatches[row].r.y;
+	P1.at<float>(0,2) = 1.0;
+
+	return Q1.inv()*P1;
+	
+	//vector <float> ret;
+	//ret.push_back(W1.at<float>(0,0));
+	//ret.push_back(W1.at<float>(0,0));
+	//ret.push_back(W1.at<float>(0,0));
+}
+
+void PF_Tracker::calcW()
+{
+	for (int i = 0 ; i < patchNum; i++)
+	{
+		vector <int> distances;
+		for (int j = 0; j < patchNum; j++)
+		{
+			if (j == i) continue;
+			int dis = l2distance(vpatches[i].r, vpatches[j].r);
+			distances.push_back(dis);
+		}
+		sort(distances.begin(), distances.end());
+		int t = distances[2];
+		vector <int> indexes;
+		for (int j = 0; j < patchNum; j++)
+		{
+			if (j == i) continue;
+			int dis = l2distance(vpatches[i].r, vpatches[j].r);
+			if(dis <=t ) 
+			{
+				indexes.push_back(j);
+			}
+		}
+		indexes.resize(3);
+		neighbors.push_back(indexes);
+	}
+	for (int i = 0 ; i < patchNum; i++)
+	{
+		showVector(neighbors[i]);
+		Mat wi = clacWij(i, neighbors[i]);
+		for (int j = 0; j < neNum; j++)
+		{
+			W.at<float>(i,neighbors[i][j]) = wi.at<float>(j,0);
+		}
+	}
+	cout<<W<<endl;
+
+	/*
+	Mat Q1(3,3,CV_32F);
+	Q1.at<float>(2,0) = 1.0;
+	Q1.at<float>(2,1) = 1.0;
+	Q1.at<float>(2,2) = 1.0;
+
+	Q1.at<float>(0,0) = vpatches[1].r.x;
+	Q1.at<float>(1,0) = vpatches[1].r.y;
+
+	Q1.at<float>(0,1) = vpatches[2].r.x;
+	Q1.at<float>(1,1) = vpatches[2].r.y;
+
+	Q1.at<float>(0,2) = vpatches[3].r.x;
+	Q1.at<float>(1,2) = vpatches[3].r.y;
+
+
+	Mat P1(3,1,CV_32F);
+	P1.at<float>(0,0) = vpatches[0].r.x;
+	P1.at<float>(0,1) = vpatches[0].r.y;
+	P1.at<float>(0,2) = 1.0;
+
+	Mat W1=Q1.inv()*P1;
+
+	Q1.at<float>(0,0) = vpatches[0].r.x;
+	Q1.at<float>(1,0) = vpatches[0].r.y;
+	Q1.at<float>(0,1) = vpatches[2].r.x;
+	Q1.at<float>(1,1) = vpatches[2].r.y;
+	Q1.at<float>(0,2) = vpatches[3].r.x;
+	Q1.at<float>(1,2) = vpatches[3].r.y;
+	P1.at<float>(0,0) = vpatches[1].r.x;
+	P1.at<float>(0,1) = vpatches[1].r.y;
+
+	Mat W2=Q1.inv()*P1;
+
+
+	Q1.at<float>(0,0) = vpatches[0].r.x;
+	Q1.at<float>(1,0) = vpatches[0].r.y;
+	Q1.at<float>(0,1) = vpatches[1].r.x;
+	Q1.at<float>(1,1) = vpatches[1].r.y;
+	Q1.at<float>(0,2) = vpatches[3].r.x;
+	Q1.at<float>(1,2) = vpatches[3].r.y;
+	P1.at<float>(0,0) = vpatches[2].r.x;
+	P1.at<float>(0,1) = vpatches[2].r.y;
+	Mat W3=Q1.inv()*P1;
+
+	Q1.at<float>(0,0) = vpatches[0].r.x;
+	Q1.at<float>(1,0) = vpatches[0].r.y;
+	Q1.at<float>(0,1) = vpatches[1].r.x;
+	Q1.at<float>(1,1) = vpatches[1].r.y;
+	Q1.at<float>(0,2) = vpatches[2].r.x;
+	Q1.at<float>(1,2) = vpatches[2].r.y;
+	P1.at<float>(0,0) = vpatches[3].r.x;
+	P1.at<float>(0,1) = vpatches[3].r.y;
+
+	Mat W4=Q1.inv()*P1;
+
+
+	
+
+	W.at<float>(0,1) = W1.at<float>(0,0);
+	W.at<float>(0,2) = W1.at<float>(1,0);
+	W.at<float>(0,3) = W1.at<float>(2,0);
+
+	W.at<float>(1,0) = W2.at<float>(0,0);
+	W.at<float>(1,2) = W2.at<float>(1,0);
+	W.at<float>(1,3) = W2.at<float>(2,0);
+
+	W.at<float>(2,0) = W3.at<float>(0,0);
+	W.at<float>(2,1) = W3.at<float>(1,0);
+	W.at<float>(2,3) = W3.at<float>(2,0);
+
+	W.at<float>(3,0) = W4.at<float>(0,0);
+	W.at<float>(3,1) = W4.at<float>(1,0);
+	W.at<float>(3,2) = W4.at<float>(2,0);
+
+
+	cout<<W<<endl;*/
+	//cout<<P1<<endl;
+	//cout<<W1<<endl;
+
+}
+
+void score(vector <vector < Patch> >  & vvpatches, vector <int> &sizes, int index)
+{
+
+}
+
+
+float PF_Tracker::solveIP(Rect region, vector <vector < Patch> >  &vvpatches,vector <int> & locationIndexes)
+{
+	vector<int> sizes;
+	for (int i = 0; i < vvpatches.size(); i++)
+	{
+		sizes.push_back(vvpatches[i].size());
+	}
+
+	vector <vector<int>> OneSituation;
+    int index = 0;
+	vector<int> base;
+    generateIndexes(OneSituation, sizes, index, base);
+	//cout<<"generateIndexes done"<<endl;
+
+	float MAX = 100000.0;
+	int answerIndex = 0;
+
+	//Mat showACase=frame.clone();
+
+	for (int i = 0;i<OneSituation.size();i++)
+	{
+
+		    float sim = 0;
+
+			for(int j=0; j< patchNum;j++)
+			{
+				//rectangle(showImg,vvpatches[j][OneSituation[i][j]].r,showColors[j]);
+				T.at<float>(j,0) = vvpatches[j][OneSituation[i][j]].r.x;
+				T.at<float>(j,1) = vvpatches[j][OneSituation[i][j]].r.y;
+				sim += vvpatches[j][OneSituation[i][j]].confidence;
+			}
+			//cout<<T<<endl;
+			Mat delta = T - W*T;
+			double ret = absSum(delta);
+			if ( ret+sim < MAX)
+			{
+				MAX = ret+sim;
+				answerIndex =i;
+
+			}
+			//cout<<absSum(delta)<<endl;
+			//showVector(OneSituation[i]);//.size()<<endl;
+	}
+	locationIndexes = OneSituation[answerIndex];
+	//cout<<"MAX"<<MAX<<endl;
+	/*for(int j=0; j< patchNum;j++)
+	{
+			rectangle(showImg,vvpatches[j][OneSituation[answerIndex][j]].r,RED);
+			circle(showACase,
+				   Point( 
+				          vvpatches[j][OneSituation[answerIndex][j]].r.x, vvpatches[j][OneSituation[answerIndex][j]].r.y
+						 ) ,
+						 4,
+						 showColors[j]
+			);
+	}*/
+	//cout<<"draw done"<<endl;
+	//rectangle(showACase, region,RED);
+	//imshow("showACase",showACase);
+	//waitKey(500);
+	return MAX;
+}
+	/*
+		vector <vector<int>> OneSituation;
+		int index = 0;
+		vector<int> base;
+		generateIndexes(OneSituation, sizes, index, base);
+
+		float MAX = 100000.0;
+		int answerIndex = 0;
+		
+		for (int i = 0;i<OneSituation.size();i++)
+		{
+			for(int j=0; j< patchNum;j++)
+			{
+				//rectangle(showImg,vvpatches[j][OneSituation[i][j]].r,showColors[j]);
+				T.at<float>(j,0) = vvpatches[j][OneSituation[i][j]].r.x;
+				T.at<float>(j,1) = vvpatches[j][OneSituation[i][j]].r.y;
+			}
+			//cout<<T<<endl;
+			Mat delta = T - W*T;
+			double ret = absSum(delta);
+			if (ret < MAX)
+			{
+				MAX=ret;
+				answerIndex =i;
+
+			}
+			//cout<<absSum(delta)<<endl;
+			//showVector(OneSituation[i]);//.size()<<endl;
+		}
+		for(int j=0; j< patchNum;j++)
+		{
+			//rectangle(showImg,vvpatches[j][OneSituation[answerIndex][j]].r,RED);
+			circle(showImg,
+				   Point( 
+				          vvpatches[j][OneSituation[answerIndex][j]].r.x, vvpatches[j][OneSituation[answerIndex][j]].r.y
+						 ) ,
+						 4,
+						 showColors[j]
+			);
+				    
+		}*/
+
+
+
+
+

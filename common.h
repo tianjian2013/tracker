@@ -83,12 +83,12 @@ struct CloudPoint
 
 std::vector<cv::Point3d> CloudPointsToPoints(const std::vector<CloudPoint> cpts);
 vector <string> makeImgsVector(const string &path, int len);
-
+void showVector(vector <int> & v);
 
 const string libraryPath = "D:\\样本集\\跟踪\\vot2015\\";
 const string vedioName = "iceskater1";
 const int vedioLength = 661;
-
+const string outputImgPath = "E:\\论文结果图片\\1\\";
 //const string imgPath = "D:\\样本集\\跟踪\\vot2015\\bag\\";
 
 
