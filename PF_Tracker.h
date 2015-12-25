@@ -63,8 +63,10 @@ typedef struct particle {
   float y0;         /**< original y coordinate */
   int width;        /**< original width of region described by particle */
   int height;       /**< original height of region described by particle */
-  histogram* histo; /**< reference histogram describing region being tracked */
+  //histogram* histo; /**< reference histogram describing region being tracked */
+  vector <int> histogram;
   float w;          /**< weight */
+  float distance;
   //Rect * ptrPatches;
 } particle;
 
@@ -75,6 +77,7 @@ public:
 	Rect r;
 	vector <int> histogram;
 	float confidence;
+	vector <particle> particles;
 	Patch()
 	{
 
@@ -82,6 +85,7 @@ public:
 	Patch(Rect rr, float c): r(rr), confidence(c)
 	{
 	}
+
 };
 
 
@@ -91,7 +95,8 @@ class PF_Tracker:public FrameProcessor
 //public:
 	static const int patchSize = 15;
 	static const int neNum = 3;
-	static const int patchNum = 5;
+	static const int patchNum = 4; 
+	static const int num_particles = 100; //Á£×ÓÊý
 
 	int frameNum, frameheight, framewidth;
 
@@ -109,12 +114,12 @@ class PF_Tracker:public FrameProcessor
 	Mat mask;
 
 	
-	histogram* ref_histo;
-	particle* particles, * new_particles;
-    Scalar color;
-	int num_particles;
-	vector <Rect> patches;
-	int NumPatches;
+	//histogram* ref_histo;
+	//particle* particles, * new_particles;
+    //Scalar color;
+	
+	//vector <Rect> patches;
+	//int NumPatches;
 
 public:
 	PF_Tracker();
@@ -125,15 +130,17 @@ private:
 	histogram* calc_histogram( Mat & img );
 	int histo_bin( float h, float s, float v );
 	void normalize_histogram( histogram* histo );
-	particle* init_distribution( Rect region, histogram* &histo, int p);
+	
+
 	particle transition( particle p, int w, int h, gsl_rng* rng );
-	void normalize_weights( particle* particles, int n );
-	float likelihood( Mat &img, int r, int c,int w, int h, histogram* ref_histo);//, vector <Rect> &particlePatches );
+	void normalize_weights( vector <particle> & vp );
+
+
 	float histo_dist_sq( histogram* h1, histogram* h2 );
 	particle* resample( particle* particles, int n );
 	//int particle_cmp( void* p1, void* p2 );
 	void makePatches();
-	void trackPatches();
+	
 	double matchTlt(Mat src,Mat dst,Point& maxLoc);
 
 	void compute_IH ();
@@ -157,8 +164,8 @@ private:
 	//void score(vector <vector < Patch> >  & vvpatches);
 	vector< Scalar> showColors;
 	float solveIP(Rect region, vector <vector < Patch> >  &vvpatches, vector <int> & locationIndexes);
-
-
+	void init_distribution( Patch &p);
+	float likelihood( int r, int c,int w, int h, vector <int>  &ref_histo, float &dt);
 
 //sfm 
 private:

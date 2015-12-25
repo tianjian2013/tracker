@@ -90,6 +90,7 @@ void weightAdd(vector <double> & v1, vector <double> & v2);
 
 const string libraryPath = "D:\\样本集\\跟踪\\vot2015\\";
 const string vedioName = "iceskater1";
+//const string vedioName = "tiger";
 const int vedioLength = 661;
 const string outputImgPath = "E:\\论文结果图片\\1\\";
 //const string imgPath = "D:\\样本集\\跟踪\\vot2015\\bag\\";
