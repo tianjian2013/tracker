@@ -135,9 +135,7 @@ private:
 	particle transition( particle p, int w, int h, gsl_rng* rng );
 	void normalize_weights( vector <particle> & vp );
 
-
-	float histo_dist_sq( histogram* h1, histogram* h2 );
-	particle* resample( particle* particles, int n );
+	vector <particle> resample( vector <particle> &particles );
 	//int particle_cmp( void* p1, void* p2 );
 	void makePatches();
 	

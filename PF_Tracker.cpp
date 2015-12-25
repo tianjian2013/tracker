@@ -24,17 +24,14 @@ extern Rect box;
   @return Returns -1 if the \a p1 has lower weight than \a p2, 1 if \a p1
     has higher weight than \a p2, and 0 if their weights are equal.
 */
-int particle_cmp( const void* p1,const  void* p2 )
-{
-  particle* _p1 = (particle*)p1;
-  particle* _p2 = (particle*)p2;
 
-  if( _p1->w > _p2->w )
-    return -1;
-  if( _p1->w < _p2->w )
-    return 1;
-  return 0;
+bool particle_cmp( const  particle &p1, const  particle & p2 )
+
+{
+	return p1.w > p2.w;
 }
+
+
 bool patchCmp(const Patch & p1, const Patch & p2)
 {
 	return p1.confidence > p2.confidence;
@@ -142,7 +139,7 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		return ;
 	}*/
 	waitKey();
-	if ( frameNum == 5)
+	//if ( frameNum == 5)
 	{
 		searchArea.x = targetRegion.x - targetRegion.width;
         searchArea.y = targetRegion.y - targetRegion.height;
@@ -197,48 +194,48 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		float maxSim, maxW;
 		vector <int> resultIndexes;
 
-		for (int i = 0;i < 1000; i++)
+		for (int i = 0;i < 10000; i++)
 		{
-			Mat showS = frame.clone();
+			//resultIndexes.clear();
+			vector <int> caseIndexes;
+			//Mat showS = frame.clone();
+			float sim = 0;
+
 		 	for (int j = 0; j < patchNum; j++)
 		    {
-				random_shuffle( mcmc[j].begin(), mcmc[j].end() );
+				int randN = rand() % mcmc[j].size();
+				caseIndexes.push_back(mcmc[j][randN]);
+				T.at<float>(j,0) = vpatches[j].particles[mcmc[j][randN]].x - vpatches[j].particles[mcmc[j][randN]].width/2 ;//vvpatches[j][OneSituation[i][j]].r.x;
+				T.at<float>(j,1) = vpatches[j].particles[mcmc[j][randN]].y - vpatches[j].particles[mcmc[j][randN]].height/2 ;
+				sim += vpatches[j].particles[mcmc[j][randN]].distance;
+				//swap(mcmc[j][0],mcmc[j][randN]);
+				//random_shuffle( mcmc[j].begin(), mcmc[j].end() );
 				//circle(showS, Point(       vpatches[j].particles[mcmc[j][0]].x,vpatches[j].particles[mcmc[j][0]].y),4,RED);          
 			}
-			float sim = 0;
-			for(int j=0; j< patchNum;j++)
-			{
-				//rectangle(showImg,vvpatches[j][OneSituation[i][j]].r,showColors[j]);
-				T.at<float>(j,0) = vpatches[j].particles[mcmc[j][0]].x - vpatches[j].particles[mcmc[j][0]].width/2 ;//vvpatches[j][OneSituation[i][j]].r.x;
-				T.at<float>(j,1) = vpatches[j].particles[mcmc[j][0]].y - vpatches[j].particles[mcmc[j][0]].height/2 ;
-				sim += vpatches[j].particles[mcmc[j][0]].distance;
-			}
-			//cout<<T<<endl;
 			Mat delta = T - W*T;
 			double ret = absSum(delta);
+
 			if ( ret+sim < MAX)
 			{
 				MAX = ret+sim;
 				maxSim = sim;
 				maxW = ret;
-				resultIndexes.clear();
-				for(int j=0; j< patchNum;j++)
-			    {
-					resultIndexes.push_back(mcmc[j][0]);
-				}
+				resultIndexes = caseIndexes;
 			}
-			//imshow("showS",showS);
-			//waitKey();
 		}
 		cout<<"Max : "<<MAX<<" maxSim : "<<maxSim<<" maxW : "<<maxW<<endl;
 		for(int j=0; j< patchNum;j++)
-		{
-			circle(showImg, Point(  vpatches[j].particles[resultIndexes[j]].x,vpatches[j].particles[resultIndexes[j]].y),4,RED);
+		{ 
+			
+			vpatches[j].particles = resample( vpatches[j].particles );
+			vpatches[j].r.x = vpatches[j].particles[0].x - vpatches[j].particles[0].width/2;
+			vpatches[j].r.y = vpatches[j].particles[0].y - vpatches[j].particles[0].height/2;
+			rectangle(showImg, vpatches[j].r, showColors[j]);
+			//circle(showImg, Point(  vpatches[j].particles[resultIndexes[j]].x,vpatches[j].particles[resultIndexes[j]].y),4,RED);
 		}
-
-
+		calcW();
+		
 		return;
-
 	}
 }
 
@@ -490,26 +487,6 @@ float PF_Tracker::distance ( const vector <int> &v1 , const vector <int> &v2 )
 	return 1.0 - sum;
 
 }
-float PF_Tracker::histo_dist_sq( histogram* h1, histogram* h2 )
-{
-  float* hist1, * hist2;
-  float sum = 0;
-  int i, n;
-
-  n = h1->n;
-  hist1 = h1->histo;
-  hist2 = h2->histo;
-
-  /*
-    According the the Battacharyya similarity coefficient,
-    
-    D = \sqrt{ 1 - \sum_1^n{ \sqrt{ h_1(i) * h_2(i) } } }
-  */
-  for( i = 0; i < n; i++ )
-    sum += sqrt( hist1[i]*hist2[i] );
-  return 1.0 - sum;
-}
-
 
 /*
   Re-samples a set of particles according to their weights to produce a
@@ -521,32 +498,32 @@ float PF_Tracker::histo_dist_sq( histogram* h1, histogram* h2 )
   
   @return Returns a new set of unweighted particles sampled from \a particles
 */
-particle* PF_Tracker::resample( particle* particles, int n )
+
+vector <particle> PF_Tracker::resample(  vector <particle> &particles )
 {
-  particle* new_particles;
-  int i, j, np, k = 0;
-
-  qsort( particles, n, sizeof( particle ), &particle_cmp );
-  new_particles =  (particle*)malloc( n * sizeof( particle ) );
-  for( i = 0; i < n; i++ )
+	vector <particle> new_particles;
+	sort(particles.begin(), particles.end(), particle_cmp);
+    for( int i = 0; i < num_particles; i++ )
     {
-      np = cvRound( particles[i].w * n );
-      for( j = 0; j < np; j++ )
-	{
-	  new_particles[k++] = particles[i];
-	  if( k == n )
-	    goto exit;
-	}
+      int np = cvRound( particles[i].w * num_particles );
+      for( int j = 0; j < np; j++ )
+	  {
+		  new_particles.push_back(particles[i]);
+		  if( new_particles.size() ==  num_particles)
+		  {
+			  return new_particles;
+		  }
+	   }
     }
-  while( k < n )
-    new_particles[k++] = particles[0];
-
- exit:
-  return new_particles;
+    while( new_particles.size() < num_particles )
+	{
+		 new_particles.push_back(particles[0]);
+	}
+    return new_particles;
 }
 
 
-void PF_Tracker::makePatches()
+void PF_Tracker:: makePatches()
 {
 	vector <Patch> initPatches;
 	Rect region=targetRegion;
@@ -961,7 +938,10 @@ void PF_Tracker::init()
 			}
 		}
 		imshow("log", pToObject1 );
-
+		rectangle(showImg, targetRegion, GREEN, 1); 
+		makePatches();
+		calcW();
+		preFrame = frame;
 		/*
 		Mat hsvTemp;
 		vector<Mat> splithsvTemp;
@@ -993,15 +973,11 @@ void PF_Tracker::init()
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "0.jpg",showImg);
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "1.jpg",pToObjectShow);
 		*/
-		rectangle(showImg, targetRegion, GREEN, 1); 
 		//imshow("mask", mask);
 		//imshow("pToObject", pToObject);
-		makePatches();
-		calcW();
 		//imwrite("E:\\论文结果图片\\初始化\\" + vedioName + "2.jpg",showImg);
 		//ref_histo = compute_ref_histos(hsv_frame, targetRegion);
 		//particles = init_distribution(targetRegion, ref_histo, num_particles);
-		preFrame = frame;
 }
 
 
@@ -1068,7 +1044,7 @@ void PF_Tracker::calcW()
 	}
 	for (int i = 0 ; i < patchNum; i++)
 	{
-		showVector(neighbors[i]);
+		//showVector(neighbors[i]);
 		Mat wi = clacWij(i, neighbors[i]);
 		for (int j = 0; j < neNum; j++)
 		{
