@@ -16,6 +16,8 @@
 
 extern bool gotBB;
 extern Rect box;
+
+
 /*
   Compare two particles based on weight.  For use in qsort.
 
@@ -44,7 +46,7 @@ bool patchCmp1(const Patch & p1, const Patch & p2)
 
 float absSum(Mat &m)
 {
-	float sum;
+	float sum = 0;
 	for (int i = 0; i< m.rows;i++)
 	{
 		for(int j = 0;j <m.cols;j++)
@@ -81,7 +83,8 @@ PF_Tracker::PF_Tracker():frameNum(0)
    showColors.push_back(GREEN);
    showColors.push_back(RED);
    showColors.push_back(PURPLE);
-
+   showColors.push_back(BROWN);
+   showColors.push_back(ORANGE);
    W = Mat::zeros(patchNum,patchNum,CV_32F);
    T.create(patchNum, 2,CV_32F);
 
@@ -132,7 +135,6 @@ void PF_Tracker::process(Mat & input,Mat & output)
 	frame = input;
 	output = input.clone(); 
 	showImg = output;
-	//cvtColor(frame,hsv_frame,CV_BGR2HSV );
 	frameNum++;
 
 	if(frameNum == 1)     //手动选择跟踪目标，在初始帧
@@ -157,130 +159,36 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		ss<<frameNum;
 		ss>>str;
 		imwrite(outputImgPath+str+".jpg",showImg);
+		preFrame  = frame;
 		return;
 	}
-	/*if(frameNum <20  && frameNum >2 )
-	{
-		return ;
-	}*/
 	//waitKey();
-	//if ( frameNum == 5)
+
+	
+	for (int i = 0;i < patchNum; i++)
 	{
-		searchArea.x = targetRegion.x - targetRegion.width;
-        searchArea.y = targetRegion.y - targetRegion.height;
-	    searchArea.width = targetRegion.width * 3;
-	    searchArea.height = targetRegion.height * 3;
-	    searchArea &= boundary;
-		roi=frame(searchArea);
-	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
-        split(hsv_frame, splithsv);
+		 rectangle(preFrame, vpatches[i].r, showColors[i]); 
+	}
+	imshow("preFrame",preFrame);
 
-		//cout<<"begin() compute_IH"<<endl;
-        compute_IH();
-		//imshow("roi",roi);
-		//cout<<"end() compute_IH"<<endl;
-		//rectangle(showImg, searchArea,RED);
-		//cout<<"begin() "<<endl;
-		vector <vector <int>> mcmc(patchNum, vector <int>()); 
-		for (int i = 0; i < patchNum; i++)
-		{
-			for( int j = 0; j < num_particles; j++ )
-			{
-				vpatches[i].particles[j] = transition( vpatches[i].particles[j], framewidth, frameheight, rng );
-				//float s = particles[j].s;
-				vpatches[i].particles[j].w = likelihood(  
-															cvRound(vpatches[i].particles[j].y),
-															cvRound( vpatches[i].particles[j].x ),
-															cvRound( vpatches[i].particles[j].width  ),
-															cvRound( vpatches[i].particles[j].height ),
-															vpatches[i].particles[j].histogram ,
-															vpatches[i].particles[j].distance
-														);
-				//rectangle(showImg, Rect(vpatches[i].particles[j].x, vpatches[i].particles[j].y, vpatches[i].particles[j].width,vpatches[i].particles[j].height), showColors[i]);	
-			}
-			normalize_weights(vpatches[i].particles);
+	searchArea.x = targetRegion.x - targetRegion.width;
+    searchArea.y = targetRegion.y - targetRegion.height;
+	searchArea.width = targetRegion.width * 3;
+	searchArea.height = targetRegion.height * 3;
+	searchArea &= boundary;
 
-			for( int j = 0; j < num_particles; j++ )
-			{
-				int num = vpatches[i].particles[j].w *100;
-				for(int k = 0; k < num; k++)
-				{
-					mcmc[i].push_back(j);
-				}
-				if (num == 0 && vpatches[i].particles[j].w > 0.005)
-				{
-					mcmc[i].push_back(j);
-				}
-				//cout << vpatches[i].particles[j].w << ",";
-				//std::random_shuffle( mcmc[i].begin(), mcmc[i].end() );
-			}
-			if (mcmc[i].empty())
-			{
-				cout << vpatches[i].r<<endl;
-				//showVector(
-			}
-			//cout << endl;
-		}
-		//cout<<"begin() "<<endl;
-
-
-		float MAX = FLT_MAX;
-		float maxSim, maxW;
-		vector <int> resultIndexes;
-
-		for (int i = 0;i < 10000; i++)
-		{
-			//resultIndexes.clear();
-			vector <int> caseIndexes;
-			//Mat showS = frame.clone();
-			float sim = 0;
-
-		 	for (int j = 0; j < patchNum; j++)
-		    {
-				int randN = rand() % mcmc[j].size();
-				caseIndexes.push_back(mcmc[j][randN]);
-				T.at<float>(j,0) = vpatches[j].particles[mcmc[j][randN]].x - vpatches[j].particles[mcmc[j][randN]].width/2 ;//vvpatches[j][OneSituation[i][j]].r.x;
-				T.at<float>(j,1) = vpatches[j].particles[mcmc[j][randN]].y - vpatches[j].particles[mcmc[j][randN]].height/2 ;
-				sim += vpatches[j].particles[mcmc[j][randN]].distance;
-				//swap(mcmc[j][0],mcmc[j][randN]);
-				//random_shuffle( mcmc[j].begin(), mcmc[j].end() );
-				//circle(showS, Point(       vpatches[j].particles[mcmc[j][0]].x,vpatches[j].particles[mcmc[j][0]].y),4,RED);          
-			}
-			Mat delta = T - W*T;
-			double ret = absSum(delta);
-
-			if ( ret+sim < MAX)
-			{
-				MAX = ret+sim;
-				maxSim = sim;
-				maxW = ret;
-				resultIndexes = caseIndexes;
-			}
-		}
-
-		//cout<<"begin() "<<endl;
-		//cout<<"Max : "<<MAX<<" maxSim : "<<maxSim<<" maxW : "<<maxW<<endl;
-		//int dx=0,dy=0;
-		for(int j=0; j< patchNum;j++)
-		{ 
-			
-			vpatches[j].particles = resample( vpatches[j].particles );
-			//dx += vpatches[j].particles[0].x - vpatches[j].particles[0].width/2 - vpatches[j].r.x;
-			//dy += vpatches[j].particles[0].y - vpatches[j].particles[0].height/2- vpatches[j].r.y;
-			vpatches[j].r.x = vpatches[j].particles[0].x - vpatches[j].particles[0].width/2;
-			vpatches[j].r.y = vpatches[j].particles[0].y - vpatches[j].particles[0].height/2;
-
-			//rectangle(showImg, vpatches[j].r, showColors[j]);
-			//circle(showImg, Point(  vpatches[j].particles[resultIndexes[j]].x,vpatches[j].particles[resultIndexes[j]].y),4,RED);
-		}
-		//targetRegion.x -= dx / patchNum;
-		//targetRegion.y -= dy / patchNum;
-		Rect boundRectNew = calcBoundingRect();
-	   //cout<<"end1() "<<endl;
+    roi=frame(searchArea);
+    cvtColor(roi,hsv_frame, CV_BGR2HSV);
+    split(hsv_frame, splithsv);
+    compute_IH();
 		
-	    pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
-	    for (int i = 0; i < searchArea.height; i++)
-	    {
+	hGraphMatching();
+
+
+	//Rect boundRectNew = calcBoundingRect();
+	pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
+	for (int i = 0; i < searchArea.height; i++)
+	{
 		  for (int j = 0; j < searchArea.width; j++)
 		  {
 				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
@@ -295,107 +203,79 @@ void PF_Tracker::process(Mat & input,Mat & output)
 					 pToObject1.at<double>(i,j)  = log(hisTargetNorm[k]) - log(hisBackgroundNorm[k]) ;//hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
 				}
 		  }
-	   }
-	   imshow("log", pToObject1 );
-	   //hisTarget=hisTargetNew;
-	   	cout<<"end2() "<<endl;
-	   //vector < Rect> vRegionSearchRect;
-		Rect regionSearchRect = targetRegion;
-		regionSearchRect.x = targetRegion.x -patchSize;
-		regionSearchRect.y = targetRegion.y -patchSize;
-		float gSim = FLT_MIN;
-		Rect result = targetRegion;
-		for (; regionSearchRect.y < targetRegion.y+patchSize ; regionSearchRect.y += 4)  
-		{
+	 }
+	 imshow("log", pToObject1 );
+	 
+
+	 Rect regionSearchRect = targetRegion;
+	 regionSearchRect.x = targetRegion.x -patchSize;
+	 regionSearchRect.y = targetRegion.y -patchSize;
+	 float gSim = FLT_MIN;
+	 Rect result = targetRegion;
+	 for (; regionSearchRect.y < targetRegion.y+patchSize ; regionSearchRect.y += 4)  
+	 {
 			for (; regionSearchRect.x < targetRegion.x+patchSize; regionSearchRect.x += 4)
 			{
-				  //circle(showImg, Point( regionSearchRect.x, regionSearchRect.y) ,2 ,RED);
-				  //rectangle(showImg, regionSearchRect,showColors[rand()%4]);
-				 // imshow("case", showImg(regionSearchRect));
-				  //waitKey();
-				  if ( ( boundRectNew&regionSearchRect) == boundRectNew )
-				  {
-					 //vRegionSearchRect.push_back(regionSearchRect);
-					 //vector<int> his;
-					 // compute_histogram (regionSearchRect,his);
-					 //float dis = distance(hisTarget, his);
+				 
 					  Rect s1 = regionSearchRect;
 					  s1.x -= searchArea.x;
 					  s1.y -= searchArea.y;
 					  s1 &= Rect(0, 0, searchArea.width, searchArea.height);
-					  cout<<"mean before "<<endl;
 					  Scalar s = mean(pToObject1(s1));
-					  cout<<"mean() end; "<<endl;
+					 
 					 double score = s[0];
 					 if (score > gSim)
 					 {
 						 gSim = score;
 						 result = regionSearchRect;
 					 }
-				  }
+				  
 			}
 			regionSearchRect.x = targetRegion.x -patchSize;
-		}
-		cout<<"end3() "<<endl;
-		//targetRegion = result;
-		targetRegion = groundTruth[frameNum-1];
+	}
+		
+     targetRegion = result;
 
-		compute_histogram(targetRegion, hisTarget);
-		vector<int> hisTargetNew, hisSearchAreaNew,hisBackgroundNew;
-	    compute_histogram(targetRegion, hisTargetNew);
-	    compute_histogram(searchArea, hisSearchAreaNew);
-	    for (int i = 0; i< hisTarget.size(); i++)
-	    {
-		    hisBackgroundNew.push_back(hisSearchAreaNew[i] - hisTargetNew[i]);
-	    }
-	    vector < double>  hisTargetNormNew = NormHis(hisTargetNew);
-	    vector < double>  hisBackgroundNormNew = NormHis(hisBackgroundNew);
-	    weightAdd( hisTargetNorm,  hisTargetNormNew);
-        weightAdd( hisBackgroundNorm,  hisBackgroundNormNew);
 
-			cout<<"end4() "<<endl;
+	 vector<int> hisTargetNew, hisSearchAreaNew,hisBackgroundNew;
+	 compute_histogram(targetRegion, hisTargetNew);
+	 compute_histogram(searchArea, hisSearchAreaNew);
+	 for (int i = 0; i< hisTarget.size(); i++)
+	 {
+		  hisBackgroundNew.push_back(hisSearchAreaNew[i] - hisTargetNew[i]);
+	 }
+	 vector < double>  hisTargetNormNew = NormHis(hisTargetNew);
+	 vector < double>  hisBackgroundNormNew = NormHis(hisBackgroundNew);
+	 weightAdd( hisTargetNorm,  hisTargetNormNew);
+     weightAdd( hisBackgroundNorm,  hisBackgroundNormNew);
+     rectangle(showImg, targetRegion, GREEN, 1); 
 
-	/*
-	   float minConfidence = FLT_MAX;
-	   int deleteIndex = -1;
 
-	   for (int i = 0;i < patchNum; i++)
-	   {
-		   double confidence = 0.0;
-		   for(int j=0; j<num_particles;j++)
-		   {
-			   circle(showImg,Point(vpatches[i].particles[j].x, vpatches[i].particles[j].y), 2,showColors[i]);
-			   Point pt;
-			   pt.x = vpatches[i].particles[j].x -searchArea.x;
-			   pt.y = vpatches[i].particles[j].y -searchArea.y;
-			   if ( pt.x > 0 && pt.y > 0 &&  
-				               ( pt.x < searchArea.x+searchArea.width) &&
-							  (pt.y <searchArea.y+searchArea.height) )
-			   {
-				   confidence +=  pToObject1.at<double>(pt.x,pt.y) * vpatches[i].particles[j].w;
-			   }
-		   }
-		   vpatches[i].confidence = confidence;
-		   calcBoundingRect(vpatches[i]);
-		   rectangle(showImg, vpatches[i].boundRect, showColors[i], 1); 
-		   //cout<<"vpatches[i].confidence : "<<vpatches[i].confidence<<endl;
+	float minConfidence = FLT_MAX;
+	int deleteIndex = -1;
 
-		   if (minConfidence > vpatches[i].confidence)
-		   {
+	for (int i = 0;i < patchNum; i++)
+	{
+		 Rect r = vpatches[i].r;
+		 r.x -= searchArea.x;
+		 r.y -= searchArea.y;
+		 r&= Rect(0, 0 ,searchArea.width, searchArea.height);
+		 Scalar s = mean(pToObject1(r));
+		 double confidence = s[0];
+		 vpatches[i].confidence = confidence;
+		 rectangle(showImg, vpatches[i].r, showColors[i], 1); 
+		 if (minConfidence > vpatches[i].confidence)
+		 {
 			   minConfidence = vpatches[i].confidence;
 			   deleteIndex = i;
-		   }
-	   }
-
-	   updatePatches(deleteIndex);*/
-		//targetRegion.x -=boundRectNew.x - boundRect.x;
-        //targetRegion.y -=boundRectNew.y - boundRect.y;
-		//boundRect = boundRectNew;
-	   rectangle(showImg, targetRegion, GREEN, 1); 
-	   calcW();
-			cout<<"end5() "<<endl;
-		return;
-	}
+		 }
+	  }
+	  updatePatches(deleteIndex);
+	 //vpatches.clear();
+	 //makePatches();
+	 calcW();
+	 preFrame  = frame;
+	 return;
 }
 
 /*
@@ -559,8 +439,6 @@ float PF_Tracker::likelihood( int r, int c,int w, int h, vector <int>  &ref_hist
   vector <int> histogram;
   compute_histogram(re, histogram);
   dt = distance ( ref_histo , histogram );
-
-  //cout <<exp( -LAMBDA * d_sq )<<endl;
   return exp( -LAMBDA * dt );
 }
 
@@ -597,11 +475,12 @@ float PF_Tracker::distance ( const vector <int> &v1 , const vector <int> &v2 )
   @return Returns a new set of unweighted particles sampled from \a particles
 */
 
-vector <particle> PF_Tracker::resample(  vector <particle> &particles )
+vector <particle> PF_Tracker::resample(  vector <particle> &particles, int j )
 {
 	vector <particle> new_particles;
 	sort(particles.begin(), particles.end(), particle_cmp);
-    for( int i = 0; i < num_particles; i++ )
+	
+    /*for( int i = 0; i < num_particles; i++ )
     {
       int np = cvRound( particles[i].w * num_particles );
       for( int j = 0; j < np; j++ )
@@ -612,10 +491,10 @@ vector <particle> PF_Tracker::resample(  vector <particle> &particles )
 			  return new_particles;
 		  }
 	   }
-    }
+    }*/
     while( new_particles.size() < num_particles )
 	{
-		 new_particles.push_back(particles[0]);
+		 new_particles.push_back(particles[j]);
 	}
     return new_particles;
 }
@@ -680,7 +559,7 @@ void PF_Tracker:: makePatches()
 			//vpatches[i].r.x+= searchArea.x;
 			//vpatches[i].r.y+= searchArea.y;
 			compute_histogram (vpatches[i].r,vpatches[i].histogram);	
-			rectangle(showImg, vpatches[i].r, GREEN, 2); 
+			//rectangle(showImg, vpatches[i].r, GREEN, 2); 
 			Focus.x += vpatches[i].r.x;
 			Focus.y += vpatches[i].r.y;
 	}
@@ -1000,14 +879,12 @@ void PF_Tracker::init()
         split(hsv_frame, splithsv);
         compute_IH();
 		
-		//cout << "1" <<endl;
 		compute_histogram(targetRegion, hisTarget);
 		compute_histogram(searchArea, hisSearchArea);
 		for (int i = 0; i< hisTarget.size(); i++)
 		{
 			hisBackground.push_back(hisSearchArea[i] - hisTarget[i]);
 		}
-		//cout << "2" <<endl;
 		hisTargetNorm = NormHis(hisTarget);
 		hisBackgroundNorm = NormHis(hisBackground);
 		pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
@@ -1029,9 +906,7 @@ void PF_Tracker::init()
 			}
 		}
 		imshow("log", pToObject1 );
-		//cout << "3" <<endl;
 		makePatches();
-		//cout << "4" <<endl;
 		boundRect = calcBoundingRect();
 		rectangle(showImg, targetRegion, GREEN, 1); 
 		rectangle(showImg, boundRect, GREEN, 1); 
@@ -1147,118 +1022,7 @@ void PF_Tracker::calcW()
 			W.at<float>(i,neighbors[i][j]) = wi.at<float>(j,0);
 		}
 	}
-	//cout<<W<<endl;
 }
-
-void score(vector <vector < Patch> >  & vvpatches, vector <int> &sizes, int index)
-{
-
-}
-
-
-float PF_Tracker::solveIP(Rect region, vector <vector < Patch> >  &vvpatches,vector <int> & locationIndexes)
-{
-	vector<int> sizes;
-	for (int i = 0; i < vvpatches.size(); i++)
-	{
-		sizes.push_back(vvpatches[i].size());
-	}
-
-	vector <vector<int>> OneSituation;
-    int index = 0;
-	vector<int> base;
-    generateIndexes(OneSituation, sizes, index, base);
-	//cout<<"generateIndexes done"<<endl;
-
-	float MAX = 100000.0;
-	int answerIndex = 0;
-
-	//Mat showACase=frame.clone();
-
-	for (int i = 0;i<OneSituation.size();i++)
-	{
-
-		    float sim = 0;
-
-			for(int j=0; j< patchNum;j++)
-			{
-				//rectangle(showImg,vvpatches[j][OneSituation[i][j]].r,showColors[j]);
-				T.at<float>(j,0) = vvpatches[j][OneSituation[i][j]].r.x;
-				T.at<float>(j,1) = vvpatches[j][OneSituation[i][j]].r.y;
-				sim += vvpatches[j][OneSituation[i][j]].confidence;
-			}
-			//cout<<T<<endl;
-			Mat delta = T - W*T;
-			double ret = absSum(delta);
-			if ( ret+sim < MAX)
-			{
-				MAX = ret+sim;
-				answerIndex =i;
-
-			}
-			//cout<<absSum(delta)<<endl;
-			//showVector(OneSituation[i]);//.size()<<endl;
-	}
-	locationIndexes = OneSituation[answerIndex];
-	//cout<<"MAX"<<MAX<<endl;
-	/*for(int j=0; j< patchNum;j++)
-	{
-			rectangle(showImg,vvpatches[j][OneSituation[answerIndex][j]].r,RED);
-			circle(showACase,
-				   Point( 
-				          vvpatches[j][OneSituation[answerIndex][j]].r.x, vvpatches[j][OneSituation[answerIndex][j]].r.y
-						 ) ,
-						 4,
-						 showColors[j]
-			);
-	}*/
-	//cout<<"draw done"<<endl;
-	//rectangle(showACase, region,RED);
-	//imshow("showACase",showACase);
-	//waitKey(500);
-	return MAX;
-}
-	/*
-		vector <vector<int>> OneSituation;
-		int index = 0;
-		vector<int> base;
-		generateIndexes(OneSituation, sizes, index, base);
-
-		float MAX = 100000.0;
-		int answerIndex = 0;
-		
-		for (int i = 0;i<OneSituation.size();i++)
-		{
-			for(int j=0; j< patchNum;j++)
-			{
-				//rectangle(showImg,vvpatches[j][OneSituation[i][j]].r,showColors[j]);
-				T.at<float>(j,0) = vvpatches[j][OneSituation[i][j]].r.x;
-				T.at<float>(j,1) = vvpatches[j][OneSituation[i][j]].r.y;
-			}
-			//cout<<T<<endl;
-			Mat delta = T - W*T;
-			double ret = absSum(delta);
-			if (ret < MAX)
-			{
-				MAX=ret;
-				answerIndex =i;
-
-			}
-			//cout<<absSum(delta)<<endl;
-			//showVector(OneSituation[i]);//.size()<<endl;
-		}
-		for(int j=0; j< patchNum;j++)
-		{
-			//rectangle(showImg,vvpatches[j][OneSituation[answerIndex][j]].r,RED);
-			circle(showImg,
-				   Point( 
-				          vvpatches[j][OneSituation[answerIndex][j]].r.x, vvpatches[j][OneSituation[answerIndex][j]].r.y
-						 ) ,
-						 4,
-						 showColors[j]
-			);
-				    
-		}*/
 
 Rect  PF_Tracker::calcBoundingRect() //找所有patch的最小外接矩形
 {
@@ -1302,31 +1066,143 @@ void  PF_Tracker::calcBoundingRect(Patch & ph) //找所有patch的最小外接矩形
 
 void PF_Tracker::updatePatches(int deleteIndex)
 {
-	/*vector <Patch> initPatches;
+	vector <Patch> initPatches;
 	Rect region=targetRegion;
-	
 	Rect r(region.x+1, region.y+1, patchSize, patchSize);
 
-	
+	/*Mat show = frame.clone();
+	for (int i = 0; i < patchNum; i++)
+	{
+				if ( i!= deleteIndex   )
+				{
+					rectangle(show,vpatches[i].r, showColors[i]);
+				}
+	}*/
+
 	while (r.y < region.y+region.height - patchSize)
 	{
-
 		while (r.x < region.x+region.width - patchSize)
 		{
-			Patch tmp;
-			tmp.r = r;
-			Rect rt=r;
-			rt.x -= searchArea.x;
-			rt.y -= searchArea.y;
-			Scalar s = mean(pToObject1(rt));
-			tmp.confidence = s[0];
-			initPatches.push_back(tmp);
+			//rectangle(show,r, showColors[deleteIndex]);
+			cout<<region<<endl;
+			bool notInsect = true;
+			for (int i = 0; i < patchNum; i++)
+			{
+				if ( i!= deleteIndex && ( (r&vpatches[i].r).area() > 1.0)  )
+				{
+					notInsect = false;
+					break;
+				}
+			}
+			if (notInsect)
+			{
+				Patch tmp;
+				tmp.r = r;
+				Rect rt=r;
+				rt.x -= searchArea.x;
+				rt.y -= searchArea.y;
+				rt &= Rect(0, 0, searchArea.width, searchArea.height);
+				Scalar s = mean(pToObject1(rt));
+				tmp.confidence = s[0];
+				initPatches.push_back(tmp);
+			}
 			r.x += patchSize;
 		}
 		r.y += patchSize;
 		r.x = region.x+1;
 	}
-	sort(initPatches.begin(), initPatches.end(), patchCmp);*/
+	sort(initPatches.begin(), initPatches.end(), patchCmp);
+	if (initPatches.size() )
+	{
+		vpatches[deleteIndex] = initPatches[0];
+		compute_histogram (vpatches[deleteIndex].r, vpatches[deleteIndex].histogram);
+		rectangle(showImg, vpatches[deleteIndex].r, showColors[deleteIndex], 3);
+		init_distribution( vpatches[deleteIndex]);
+	}
+}
+
+
+void PF_Tracker::hGraphMatching()
+{
+	vector <vector <int>> mcmc(patchNum, vector <int>()); 
+	for (int i = 0; i < patchNum; i++)
+	{
+		for( int j = 0; j < num_particles; j++ )
+		{
+			vpatches[i].particles[j] = transition( vpatches[i].particles[j], framewidth, frameheight, rng );
+			//float s = particles[j].s;
+			vpatches[i].particles[j].w = likelihood(  
+															cvRound(vpatches[i].particles[j].y),
+															cvRound( vpatches[i].particles[j].x ),
+															cvRound( vpatches[i].particles[j].width  ),
+															cvRound( vpatches[i].particles[j].height ),
+															vpatches[i].particles[j].histogram ,
+															vpatches[i].particles[j].distance
+													);
+			//rectangle(showImg, Rect(vpatches[i].particles[j].x, vpatches[i].particles[j].y, vpatches[i].particles[j].width,vpatches[i].particles[j].height), showColors[i]);	
+		}
+		normalize_weights(vpatches[i].particles);
+		for( int j = 0; j < num_particles; j++ )
+		{
+			int num = vpatches[i].particles[j].w *100;
+			for(int k = 0; k < num; k++)
+			{
+				mcmc[i].push_back(j);
+			}
+			if (num == 0 && vpatches[i].particles[j].w > 0.005)
+			{
+				mcmc[i].push_back(j);
+			}	
+		}
+		if (mcmc[i].empty())
+		{
+			for( int j = 0; j < num_particles; j++ )
+			{
+				cout << vpatches[i].particles[j].w <<endl;
+			}
+            cout << endl;	
+		}		
+	}
+		
+	float MAX = FLT_MAX;
+	float maxSim, maxW;
+	vector <int> resultIndexes;
+
+	for (int i = 0;i < 100000; i++)
+	{
+ 		vector <int> caseIndexes ;		//Mat showS = frame.clone();
+		float sim = 0;
+
+		for (int j = 0; j < patchNum; j++)
+		{
+			int randN = rand() % mcmc[j].size();
+			caseIndexes.push_back(mcmc[j][randN]);
+			T.at<float>(j,0) = vpatches[j].particles[mcmc[j][randN]].x - vpatches[j].particles[mcmc[j][randN]].width/2 ;//vvpatches[j][OneSituation[i][j]].r.x;
+			T.at<float>(j,1) = vpatches[j].particles[mcmc[j][randN]].y - vpatches[j].particles[mcmc[j][randN]].height/2 ;
+			sim += vpatches[j].particles[mcmc[j][randN]].distance;    
+		}
+		Mat delta = T - W*T;
+		double ret = absSum(delta);
+		//sim *= 5;
+		//sim = 0.0;
+		if ( ret+sim < MAX)
+		{
+			MAX = ret+sim;
+			maxSim = sim;
+			maxW = ret;
+			resultIndexes = caseIndexes;
+		}
+	}
+	if (FLAG1)
+		cout<<"MAX : "<<MAX<<"maxSim : "<<maxSim<<" maxW"<<maxW<<endl;
+
+	for(int j=0; j< patchNum;j++)
+	{ 
+		vpatches[j].r.x = vpatches[j].particles[0].x - vpatches[j].particles[resultIndexes[j]].width/2;
+		vpatches[j].r.y = vpatches[j].particles[0].y - vpatches[j].particles[resultIndexes[j]].height/2;
+		vpatches[j].particles = resample( vpatches[j].particles, resultIndexes[j]);
+		rectangle(showImg, vpatches[j].r, showColors[j], 1); 
+	}
 }
 
 

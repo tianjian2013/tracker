@@ -139,7 +139,7 @@ private:
 	particle transition( particle p, int w, int h, gsl_rng* rng );
 	void normalize_weights( vector <particle> & vp );
 
-	vector <particle> resample( vector <particle> &particles );
+	vector <particle> resample( vector <particle> &particles,int j );
 	//int particle_cmp( void* p1, void* p2 );
 	void makePatches();
 
@@ -163,7 +163,6 @@ private:
 	vector <vector <int>> neighbors;
 	//void score(vector <vector < Patch> >  & vvpatches);
 	vector< Scalar> showColors;
-	float solveIP(Rect region, vector <vector < Patch> >  &vvpatches, vector <int> & locationIndexes);
 	void init_distribution( Patch &p);
 	float likelihood( int r, int c,int w, int h, vector <int>  &ref_histo, float &dt);
 	Rect  calcBoundingRect();//找所有patch的最小外接矩形
@@ -177,7 +176,7 @@ private:
 	deque <Rect> previousRegions;
 	void sfm();
 
-
+	void hGraphMatching();
 	// 存放结果， 中间结果
 	vector <Rect> groundTruth;
 };

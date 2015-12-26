@@ -89,6 +89,7 @@ vector < double> NormHis(vector <int> & v);
 void weightAdd(vector <double> & v1, vector <double> & v2);
 
 const string libraryPath = "D:\\样本集\\跟踪\\vot2013\\";
+//const string vedioName = "iceskater";
 const string vedioName = "face";
 //const string vedioName = "tiger";
 //const string vedioName = "wiper";
@@ -100,6 +101,6 @@ const int vedioLength = 400;
 const string outputImgPath = "E:\\论文结果图片\\2\\";
 //const string imgPath = "D:\\样本集\\跟踪\\vot2015\\bag\\";
 
-
+const bool FLAG1 = true;  // 显示匹配结果数值
 
 #endif
