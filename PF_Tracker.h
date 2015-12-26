@@ -74,7 +74,7 @@ typedef struct particle {
 class Patch
 {
 public:
-	Rect r;
+	Rect r,boundRect;
 	vector <int> histogram;
 	float confidence;
 	vector <particle> particles;
@@ -95,7 +95,7 @@ class PF_Tracker:public FrameProcessor
 //public:
 	static const int patchSize = 15;
 	static const int neNum = 3;
-	static const int patchNum = 4; 
+	static const int patchNum = 6; 
 	static const int num_particles = 100; //粒子数
 
 	int frameNum, frameheight, framewidth;
@@ -108,6 +108,7 @@ class PF_Tracker:public FrameProcessor
 	gsl_rng* rng;
 
 	Mat frame,hsv_frame,hsv_ref_imgs, preFrame, showImg, roi;
+
 
 	vector < Mat > splithsv;
 	vector < Mat > IIV_T;  //目标积分图
@@ -126,8 +127,11 @@ public:
 	void process(Mat & input,Mat & output);
 
 private:
-	histogram* compute_ref_histos( Mat& frame, Rect region );
-	histogram* calc_histogram( Mat & img );
+	//compute_ref_histos( Mat& frame, Rect region );
+    //vector <int> targetHistogram;
+	//histogram* calc_histogram( Mat & img );
+
+
 	int histo_bin( float h, float s, float v );
 	void normalize_histogram( histogram* histo );
 	
@@ -138,8 +142,6 @@ private:
 	vector <particle> resample( vector <particle> &particles );
 	//int particle_cmp( void* p1, void* p2 );
 	void makePatches();
-	
-	double matchTlt(Mat src,Mat dst,Point& maxLoc);
 
 	void compute_IH ();
 	void compute_histogram (Rect r,vector < int >& hist);
@@ -164,11 +166,18 @@ private:
 	float solveIP(Rect region, vector <vector < Patch> >  &vvpatches, vector <int> & locationIndexes);
 	void init_distribution( Patch &p);
 	float likelihood( int r, int c,int w, int h, vector <int>  &ref_histo, float &dt);
-
+	Rect  calcBoundingRect();//找所有patch的最小外接矩形
+	void calcBoundingRect(Patch & ph); //找所有patch的最小外接矩形
+	Rect boundRect;
+	void updatePatches(int deleteIndex);
 //sfm 
 private:
 	Mat K;
 	deque <Mat> previousImgs;
 	deque <Rect> previousRegions;
 	void sfm();
+
+
+	// 存放结果， 中间结果
+	vector <Rect> groundTruth;
 };

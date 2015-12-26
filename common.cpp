@@ -89,7 +89,7 @@ void weightAdd(vector <int> & v1, vector <int> & v2)
 {
 	for (int i = 0;i < v1.size();i++)
 	{
-		v1[i] = v1[i]*9 / 10 + v2[i]/10;
+		v1[i] = v1[i]*95 / 100 + v2[i]*5/100;
 	}
 
 }
@@ -98,7 +98,7 @@ void weightAdd(vector <double> & v1, vector <double> & v2)
 {
 	for (int i = 0;i < v1.size();i++)
 	{
-		v1[i] = v1[i]*9 / 10 + v2[i]/10;
+		v1[i] = v1[i]*95 / 100 + v2[i]*5/100;
 	}
 
 }

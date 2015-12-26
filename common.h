@@ -88,11 +88,16 @@ void weightAdd(vector <int> & v1, vector <int> & v2);
 vector < double> NormHis(vector <int> & v);
 void weightAdd(vector <double> & v1, vector <double> & v2);
 
-const string libraryPath = "D:\\样本集\\跟踪\\vot2015\\";
-const string vedioName = "iceskater1";
+const string libraryPath = "D:\\样本集\\跟踪\\vot2013\\";
+const string vedioName = "face";
 //const string vedioName = "tiger";
-const int vedioLength = 661;
-const string outputImgPath = "E:\\论文结果图片\\1\\";
+//const string vedioName = "wiper";
+//const string vedioName = "soccer1";
+//const string vedioName = "car1";
+//const string vedioName = "girl";
+
+const int vedioLength = 400;
+const string outputImgPath = "E:\\论文结果图片\\2\\";
 //const string imgPath = "D:\\样本集\\跟踪\\vot2015\\bag\\";
 
 

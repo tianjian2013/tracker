@@ -9,6 +9,7 @@
 #include<opencv2/legacy/legacy.hpp>
 #include <math.h>
 #include <algorithm>
+#include <fstream>
 
 //---gsl的库文件-----------
 #pragma comment (lib, "libgsl.a")
@@ -83,6 +84,30 @@ PF_Tracker::PF_Tracker():frameNum(0)
 
    W = Mat::zeros(patchNum,patchNum,CV_32F);
    T.create(patchNum, 2,CV_32F);
+
+
+   ifstream gtFile(libraryPath+vedioName+"//groundtruth.txt",ios::in);
+   string str;
+   while(gtFile >> str)
+   {
+	   //cout<<str<<endl;
+	   vector <int> xywh;
+	   int i = 0,pre=0;
+	   while (i < str.size())
+	   {
+		   if (str[i] == ',')
+		   {
+			   xywh.push_back(atoi(str.substr(pre,i - pre).c_str()));
+			   pre = i+1;
+		   }
+		   i++;
+	   }
+	   xywh.push_back(atoi(str.substr(pre).c_str()));
+	   Rect r(xywh[0], xywh[1], xywh[2], xywh[3]);
+	   groundTruth.push_back(r);
+   }
+
+
 }
 
 void generateIndexes(vector <vector<int>> &OneSituation, vector <int> &sizes, int index, vector<int> &base)
@@ -138,7 +163,7 @@ void PF_Tracker::process(Mat & input,Mat & output)
 	{
 		return ;
 	}*/
-	waitKey();
+	//waitKey();
 	//if ( frameNum == 5)
 	{
 		searchArea.x = targetRegion.x - targetRegion.width;
@@ -149,11 +174,13 @@ void PF_Tracker::process(Mat & input,Mat & output)
 		roi=frame(searchArea);
 	    cvtColor(roi,hsv_frame, CV_BGR2HSV);
         split(hsv_frame, splithsv);
+
+		//cout<<"begin() compute_IH"<<endl;
         compute_IH();
 		//imshow("roi",roi);
-
-		rectangle(showImg, searchArea,RED);
-
+		//cout<<"end() compute_IH"<<endl;
+		//rectangle(showImg, searchArea,RED);
+		//cout<<"begin() "<<endl;
 		vector <vector <int>> mcmc(patchNum, vector <int>()); 
 		for (int i = 0; i < patchNum; i++)
 		{
@@ -187,8 +214,15 @@ void PF_Tracker::process(Mat & input,Mat & output)
 				//cout << vpatches[i].particles[j].w << ",";
 				//std::random_shuffle( mcmc[i].begin(), mcmc[i].end() );
 			}
+			if (mcmc[i].empty())
+			{
+				cout << vpatches[i].r<<endl;
+				//showVector(
+			}
 			//cout << endl;
 		}
+		//cout<<"begin() "<<endl;
+
 
 		float MAX = FLT_MAX;
 		float maxSim, maxW;
@@ -223,82 +257,146 @@ void PF_Tracker::process(Mat & input,Mat & output)
 				resultIndexes = caseIndexes;
 			}
 		}
-		cout<<"Max : "<<MAX<<" maxSim : "<<maxSim<<" maxW : "<<maxW<<endl;
+
+		//cout<<"begin() "<<endl;
+		//cout<<"Max : "<<MAX<<" maxSim : "<<maxSim<<" maxW : "<<maxW<<endl;
+		//int dx=0,dy=0;
 		for(int j=0; j< patchNum;j++)
 		{ 
 			
 			vpatches[j].particles = resample( vpatches[j].particles );
+			//dx += vpatches[j].particles[0].x - vpatches[j].particles[0].width/2 - vpatches[j].r.x;
+			//dy += vpatches[j].particles[0].y - vpatches[j].particles[0].height/2- vpatches[j].r.y;
 			vpatches[j].r.x = vpatches[j].particles[0].x - vpatches[j].particles[0].width/2;
 			vpatches[j].r.y = vpatches[j].particles[0].y - vpatches[j].particles[0].height/2;
-			rectangle(showImg, vpatches[j].r, showColors[j]);
+
+			//rectangle(showImg, vpatches[j].r, showColors[j]);
 			//circle(showImg, Point(  vpatches[j].particles[resultIndexes[j]].x,vpatches[j].particles[resultIndexes[j]].y),4,RED);
 		}
-		calcW();
+		//targetRegion.x -= dx / patchNum;
+		//targetRegion.y -= dy / patchNum;
+		Rect boundRectNew = calcBoundingRect();
+	   //cout<<"end1() "<<endl;
 		
+	    pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
+	    for (int i = 0; i < searchArea.height; i++)
+	    {
+		  for (int j = 0; j < searchArea.width; j++)
+		  {
+				int hIndex = splithsv[0].at<uchar>(i, j) * NH/ 181;
+			    int sIndex = splithsv[1].at<uchar>(i, j) * NS/ 256;
+				int k = 10 * hIndex + sIndex;
+				if (mask.at<uchar>(i,j) == 0)
+				{
+				    pToObject1.at< double>(i,j)= 0;
+				}
+				else
+				{
+					 pToObject1.at<double>(i,j)  = log(hisTargetNorm[k]) - log(hisBackgroundNorm[k]) ;//hisTarget[k]*255/(hisSearchArea[k]);//*3/2 ;
+				}
+		  }
+	   }
+	   imshow("log", pToObject1 );
+	   //hisTarget=hisTargetNew;
+	   	cout<<"end2() "<<endl;
+	   //vector < Rect> vRegionSearchRect;
+		Rect regionSearchRect = targetRegion;
+		regionSearchRect.x = targetRegion.x -patchSize;
+		regionSearchRect.y = targetRegion.y -patchSize;
+		float gSim = FLT_MIN;
+		Rect result = targetRegion;
+		for (; regionSearchRect.y < targetRegion.y+patchSize ; regionSearchRect.y += 4)  
+		{
+			for (; regionSearchRect.x < targetRegion.x+patchSize; regionSearchRect.x += 4)
+			{
+				  //circle(showImg, Point( regionSearchRect.x, regionSearchRect.y) ,2 ,RED);
+				  //rectangle(showImg, regionSearchRect,showColors[rand()%4]);
+				 // imshow("case", showImg(regionSearchRect));
+				  //waitKey();
+				  if ( ( boundRectNew&regionSearchRect) == boundRectNew )
+				  {
+					 //vRegionSearchRect.push_back(regionSearchRect);
+					 //vector<int> his;
+					 // compute_histogram (regionSearchRect,his);
+					 //float dis = distance(hisTarget, his);
+					  Rect s1 = regionSearchRect;
+					  s1.x -= searchArea.x;
+					  s1.y -= searchArea.y;
+					  s1 &= Rect(0, 0, searchArea.width, searchArea.height);
+					  cout<<"mean before "<<endl;
+					  Scalar s = mean(pToObject1(s1));
+					  cout<<"mean() end; "<<endl;
+					 double score = s[0];
+					 if (score > gSim)
+					 {
+						 gSim = score;
+						 result = regionSearchRect;
+					 }
+				  }
+			}
+			regionSearchRect.x = targetRegion.x -patchSize;
+		}
+		cout<<"end3() "<<endl;
+		//targetRegion = result;
+		targetRegion = groundTruth[frameNum-1];
+
+		compute_histogram(targetRegion, hisTarget);
+		vector<int> hisTargetNew, hisSearchAreaNew,hisBackgroundNew;
+	    compute_histogram(targetRegion, hisTargetNew);
+	    compute_histogram(searchArea, hisSearchAreaNew);
+	    for (int i = 0; i< hisTarget.size(); i++)
+	    {
+		    hisBackgroundNew.push_back(hisSearchAreaNew[i] - hisTargetNew[i]);
+	    }
+	    vector < double>  hisTargetNormNew = NormHis(hisTargetNew);
+	    vector < double>  hisBackgroundNormNew = NormHis(hisBackgroundNew);
+	    weightAdd( hisTargetNorm,  hisTargetNormNew);
+        weightAdd( hisBackgroundNorm,  hisBackgroundNormNew);
+
+			cout<<"end4() "<<endl;
+
+	/*
+	   float minConfidence = FLT_MAX;
+	   int deleteIndex = -1;
+
+	   for (int i = 0;i < patchNum; i++)
+	   {
+		   double confidence = 0.0;
+		   for(int j=0; j<num_particles;j++)
+		   {
+			   circle(showImg,Point(vpatches[i].particles[j].x, vpatches[i].particles[j].y), 2,showColors[i]);
+			   Point pt;
+			   pt.x = vpatches[i].particles[j].x -searchArea.x;
+			   pt.y = vpatches[i].particles[j].y -searchArea.y;
+			   if ( pt.x > 0 && pt.y > 0 &&  
+				               ( pt.x < searchArea.x+searchArea.width) &&
+							  (pt.y <searchArea.y+searchArea.height) )
+			   {
+				   confidence +=  pToObject1.at<double>(pt.x,pt.y) * vpatches[i].particles[j].w;
+			   }
+		   }
+		   vpatches[i].confidence = confidence;
+		   calcBoundingRect(vpatches[i]);
+		   rectangle(showImg, vpatches[i].boundRect, showColors[i], 1); 
+		   //cout<<"vpatches[i].confidence : "<<vpatches[i].confidence<<endl;
+
+		   if (minConfidence > vpatches[i].confidence)
+		   {
+			   minConfidence = vpatches[i].confidence;
+			   deleteIndex = i;
+		   }
+	   }
+
+	   updatePatches(deleteIndex);*/
+		//targetRegion.x -=boundRectNew.x - boundRect.x;
+        //targetRegion.y -=boundRectNew.y - boundRect.y;
+		//boundRect = boundRectNew;
+	   rectangle(showImg, targetRegion, GREEN, 1); 
+	   calcW();
+			cout<<"end5() "<<endl;
 		return;
 	}
 }
-
-/*
-  Computes a reference histogram for each of the object regions defined by
-  the user
-
-  @param frame video frame in which to compute histograms; should have been
-    converted to hsv using bgr2hsv 
-  @param region region of a frame over which histogram should be computed
-  @return Returns  a  normalized histogramscorresponding
-    to region of a frame
-*/
-histogram* PF_Tracker::compute_ref_histos( Mat& frame, Rect region )
-{
-  histogram* histo = (histogram *) new (histogram);
-  
-  Mat ImageROI=frame(region);
-
-  Mat tmp;
-  tmp.create(region.height,region.width,frame.type());
-  ImageROI.copyTo(tmp);
-   
-  histo = calc_histogram( tmp );
-  normalize_histogram( histo );
- 
-  return histo;
-}
-
-/*
-  Calculates a cumulative histogram as defined above for a given array
-  of images
-  @param img an array of images over which to compute a cumulative histogram;
-    each must have been converted to HSV colorspace using bgr2hsv()
-  @return Returns an un-normalized HSV histogram for \a imgs
-*/
-histogram* PF_Tracker::calc_histogram( Mat & img )
-{
-
-
-  histogram* histo= (histogram* )new( histogram );
-  histo->n = NH*NS + NV;
-  memset( histo->histo, 0, histo->n * sizeof(float) );
-
-  int i, r, c, bin;
-  /* increment appropriate histogram bin for each pixel */
-  for( r = 0; r < img.rows; r++ )
-  {
-	  uchar *data=img.ptr<uchar>(r);
-	  for( c = 0; c < img.cols; c++ )
-	  {
-        float h,s,v;
-		h=(float)data[c++]*2;
-		s=(float)data[c++]/255;
-		v= (float)data[c]/255;
-	    bin = histo_bin( h,s,v );
-	    histo->histo[bin] += 1;
-	  }
-  }
-  return histo;
-}
-
-
 
 /*
   Normalizes a histogram so all bins sum to 1.0
@@ -403,9 +501,9 @@ particle PF_Tracker::transition( particle p, int w, int h, gsl_rng* rng )
   particle pn;
 
   //随机漂移模型
-  x = p.x+10.0*gsl_ran_gaussian( rng, TRANS_X_STD ) ;
+  x = p.x+5.0*gsl_ran_gaussian( rng, TRANS_X_STD ) ;
   pn.x = MAX( 0.0, MIN( (float)w - 1.0, x ) );
-  y = p.y + 10.0*gsl_ran_gaussian( rng, TRANS_Y_STD ) ;
+  y = p.y + 5.0*gsl_ran_gaussian( rng, TRANS_Y_STD ) ;
   pn.y = MAX( 0.0, MIN( (float)h - 1.0, y ) );
   s = p.s  +  10.0*gsl_ran_gaussian( rng, TRANS_S_STD );
   pn.s = MAX( 0.1, s );
@@ -595,25 +693,6 @@ void PF_Tracker:: makePatches()
 	}
 }
 
-
-double PF_Tracker::matchTlt(Mat src,Mat dst,Point& maxLoc)
-{
-	double minVal,maxVal;
-	Point minLoc;
-
-	Mat srcGray(src.rows,src.cols,CV_8UC1);
-	Mat dstGray(dst.rows,dst.cols,CV_8UC1);
-
-	Mat result(dst.rows-src.rows+1,dst.cols-src.cols+1,CV_32FC1);
-
-	cvtColor(src,srcGray,CV_BGR2GRAY);
-	cvtColor(dst,dstGray,CV_BGR2GRAY);
-
-	matchTemplate(srcGray,dstGray,result,CV_TM_CCOEFF_NORMED);
-	minMaxLoc(result,&minVal,&maxVal,&minLoc,&maxLoc);
-	return maxVal;
-}
-
 void PF_Tracker::sfm()
 {
 	Mat prev = previousImgs.back();
@@ -784,11 +863,12 @@ void PF_Tracker::sfm()
 
 void PF_Tracker::compute_IH ()
 {
+	//cout<< "compute_IH  begin()"<<endl;
 	inRange(hsv_frame, Scalar(0, S_THRESH*255, V_THRESH*255), Scalar(181, 256, 256), mask);
 	int sum = 0;
 	int loc00 = 10 * splithsv[0].at<uchar>(0, 0) * NH/ 181 + splithsv[1].at<uchar>(0, 0) * NS/ 256;
-	if (mask.at<uchar>(0,0) )
-		hisIntegral[loc00][0][0] = 1;
+	//if (mask.at<uchar>(0,0) )
+	//	hisIntegral[loc00][0][0] = 1;
 	for (int i = 1; i < searchArea.height; i++)
 	{
 		int hIndex = splithsv[0].at<uchar>(i, 0) * NH/ 181;
@@ -840,7 +920,7 @@ void PF_Tracker::compute_IH ()
 	{
 		sum += hisIntegral[i][searchArea.height - 1][searchArea.width - 1];
 	}
-	
+	//cout<< "compute_IH end"<<endl;
 	
 }
 
@@ -861,6 +941,15 @@ void PF_Tracker::compute_histogram (Rect r,vector < int >& hist)
 	r.y-=searchArea.y;
 	Rect boud=Rect(0,0,searchArea.width-1,searchArea.height-1);
 	r&=boud;
+
+	if (r.area() < 10.0)
+	{
+		for (int l = 0; l < NH * NS; l++)
+	    {
+			hist.push_back(0);
+		}
+		return ;
+	}
 
 	int left , up , diag;
 	//double sum = 0;
@@ -902,7 +991,8 @@ void PF_Tracker::init()
 		
 	    for (int i = 0; i < NH * NS;i ++)
 	    {
-			vector < vector<int> > m(searchArea.height, vector<int> (searchArea.width,0));
+			vector < vector<int> > m(frameheight, vector<int> (framewidth,0));
+			//vector < vector<int> > m(searchArea.height, vector<int> (searchArea.width,0));
 			hisIntegral.push_back(m);
 		}
 		roi=frame(searchArea);
@@ -910,13 +1000,14 @@ void PF_Tracker::init()
         split(hsv_frame, splithsv);
         compute_IH();
 		
+		//cout << "1" <<endl;
 		compute_histogram(targetRegion, hisTarget);
 		compute_histogram(searchArea, hisSearchArea);
 		for (int i = 0; i< hisTarget.size(); i++)
 		{
 			hisBackground.push_back(hisSearchArea[i] - hisTarget[i]);
 		}
-
+		//cout << "2" <<endl;
 		hisTargetNorm = NormHis(hisTarget);
 		hisBackgroundNorm = NormHis(hisBackground);
 		pToObject1.create(searchArea.height, searchArea.width, CV_64FC1);
@@ -938,9 +1029,14 @@ void PF_Tracker::init()
 			}
 		}
 		imshow("log", pToObject1 );
-		rectangle(showImg, targetRegion, GREEN, 1); 
+		//cout << "3" <<endl;
 		makePatches();
+		//cout << "4" <<endl;
+		boundRect = calcBoundingRect();
+		rectangle(showImg, targetRegion, GREEN, 1); 
+		rectangle(showImg, boundRect, GREEN, 1); 
 		calcW();
+		
 		preFrame = frame;
 		/*
 		Mat hsvTemp;
@@ -1005,8 +1101,8 @@ Mat PF_Tracker::clacWij(int row, vector <int> indexes)
 
 	Mat P1(3,1,CV_32F);
 	P1.at<float>(0,0) = vpatches[row].r.x;
-	P1.at<float>(0,1) = vpatches[row].r.y;
-	P1.at<float>(0,2) = 1.0;
+	P1.at<float>(1,0) = vpatches[row].r.y;
+	P1.at<float>(2,0) = 1.0;
 
 	return Q1.inv()*P1;
 	
@@ -1051,88 +1147,7 @@ void PF_Tracker::calcW()
 			W.at<float>(i,neighbors[i][j]) = wi.at<float>(j,0);
 		}
 	}
-	cout<<W<<endl;
-
-	/*
-	Mat Q1(3,3,CV_32F);
-	Q1.at<float>(2,0) = 1.0;
-	Q1.at<float>(2,1) = 1.0;
-	Q1.at<float>(2,2) = 1.0;
-
-	Q1.at<float>(0,0) = vpatches[1].r.x;
-	Q1.at<float>(1,0) = vpatches[1].r.y;
-
-	Q1.at<float>(0,1) = vpatches[2].r.x;
-	Q1.at<float>(1,1) = vpatches[2].r.y;
-
-	Q1.at<float>(0,2) = vpatches[3].r.x;
-	Q1.at<float>(1,2) = vpatches[3].r.y;
-
-
-	Mat P1(3,1,CV_32F);
-	P1.at<float>(0,0) = vpatches[0].r.x;
-	P1.at<float>(0,1) = vpatches[0].r.y;
-	P1.at<float>(0,2) = 1.0;
-
-	Mat W1=Q1.inv()*P1;
-
-	Q1.at<float>(0,0) = vpatches[0].r.x;
-	Q1.at<float>(1,0) = vpatches[0].r.y;
-	Q1.at<float>(0,1) = vpatches[2].r.x;
-	Q1.at<float>(1,1) = vpatches[2].r.y;
-	Q1.at<float>(0,2) = vpatches[3].r.x;
-	Q1.at<float>(1,2) = vpatches[3].r.y;
-	P1.at<float>(0,0) = vpatches[1].r.x;
-	P1.at<float>(0,1) = vpatches[1].r.y;
-
-	Mat W2=Q1.inv()*P1;
-
-
-	Q1.at<float>(0,0) = vpatches[0].r.x;
-	Q1.at<float>(1,0) = vpatches[0].r.y;
-	Q1.at<float>(0,1) = vpatches[1].r.x;
-	Q1.at<float>(1,1) = vpatches[1].r.y;
-	Q1.at<float>(0,2) = vpatches[3].r.x;
-	Q1.at<float>(1,2) = vpatches[3].r.y;
-	P1.at<float>(0,0) = vpatches[2].r.x;
-	P1.at<float>(0,1) = vpatches[2].r.y;
-	Mat W3=Q1.inv()*P1;
-
-	Q1.at<float>(0,0) = vpatches[0].r.x;
-	Q1.at<float>(1,0) = vpatches[0].r.y;
-	Q1.at<float>(0,1) = vpatches[1].r.x;
-	Q1.at<float>(1,1) = vpatches[1].r.y;
-	Q1.at<float>(0,2) = vpatches[2].r.x;
-	Q1.at<float>(1,2) = vpatches[2].r.y;
-	P1.at<float>(0,0) = vpatches[3].r.x;
-	P1.at<float>(0,1) = vpatches[3].r.y;
-
-	Mat W4=Q1.inv()*P1;
-
-
-	
-
-	W.at<float>(0,1) = W1.at<float>(0,0);
-	W.at<float>(0,2) = W1.at<float>(1,0);
-	W.at<float>(0,3) = W1.at<float>(2,0);
-
-	W.at<float>(1,0) = W2.at<float>(0,0);
-	W.at<float>(1,2) = W2.at<float>(1,0);
-	W.at<float>(1,3) = W2.at<float>(2,0);
-
-	W.at<float>(2,0) = W3.at<float>(0,0);
-	W.at<float>(2,1) = W3.at<float>(1,0);
-	W.at<float>(2,3) = W3.at<float>(2,0);
-
-	W.at<float>(3,0) = W4.at<float>(0,0);
-	W.at<float>(3,1) = W4.at<float>(1,0);
-	W.at<float>(3,2) = W4.at<float>(2,0);
-
-
-	cout<<W<<endl;*/
-	//cout<<P1<<endl;
-	//cout<<W1<<endl;
-
+	//cout<<W<<endl;
 }
 
 void score(vector <vector < Patch> >  & vvpatches, vector <int> &sizes, int index)
@@ -1245,7 +1260,74 @@ float PF_Tracker::solveIP(Rect region, vector <vector < Patch> >  &vvpatches,vec
 				    
 		}*/
 
+Rect  PF_Tracker::calcBoundingRect() //找所有patch的最小外接矩形
+{
+	Rect result(10000,10000,0,0);
+	for(size_t  i=0;i<vpatches.size();i++)
+	{
+		if(vpatches[i].r.x<result.x)
+			result.x=vpatches[i].r.x;
+		if(vpatches[i].r.y<result.y)
+			result.y=vpatches[i].r.y;
+		if(vpatches[i].r.x+vpatches[i].r.width>result.width)
+			result.width=vpatches[i].r.x+vpatches[i].r.width;
+		if(vpatches[i].r.y+vpatches[i].r.height>result.height)
+			result.height=vpatches[i].r.y+vpatches[i].r.height;
+	}
+	result.width=result.width-result.x;
+	result.height=result.height-result.y;
+	return result;
+}
 
+void  PF_Tracker::calcBoundingRect(Patch & ph) //找所有patch的最小外接矩形
+{
+	Rect result(10000,10000,0,0);
+
+	for(size_t  i=0;i<ph.particles.size();i++)
+	{
+		if(ph.particles[i].x<result.x)
+			result.x=ph.particles[i].x;
+		if(ph.particles[i].y<result.y)
+			result.y=ph.particles[i].y;
+		if(ph.particles[i].x > result.width)
+			result.width=ph.particles[i].x;
+		if(ph.particles[i].y > result.height)
+			result.height=ph.particles[i].y;
+	}
+	result.width=result.width-result.x;
+	result.height=result.height-result.y;
+	ph.boundRect = result;
+	//return result;
+}
+
+void PF_Tracker::updatePatches(int deleteIndex)
+{
+	/*vector <Patch> initPatches;
+	Rect region=targetRegion;
+	
+	Rect r(region.x+1, region.y+1, patchSize, patchSize);
+
+	
+	while (r.y < region.y+region.height - patchSize)
+	{
+
+		while (r.x < region.x+region.width - patchSize)
+		{
+			Patch tmp;
+			tmp.r = r;
+			Rect rt=r;
+			rt.x -= searchArea.x;
+			rt.y -= searchArea.y;
+			Scalar s = mean(pToObject1(rt));
+			tmp.confidence = s[0];
+			initPatches.push_back(tmp);
+			r.x += patchSize;
+		}
+		r.y += patchSize;
+		r.x = region.x+1;
+	}
+	sort(initPatches.begin(), initPatches.end(), patchCmp);*/
+}
 
 
 
